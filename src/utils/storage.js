@@ -4,26 +4,13 @@ import { isSupabaseConfigured, supabase } from './supabase.js'
 export const STORAGE_KEY = 'expenseTracker'
 export const DATA_VERSION = 1
 
-export const DEFAULT_CATEGORIES = [
-  'Food',
-  'Transport',
-  'Shopping',
-  'Bills',
-  'EMI',
-  'Entertainment',
-  'Health',
-  'Travel',
-  'Education',
-  'Other',
-]
-
 export function emptyData() {
   return {
     version: DATA_VERSION,
     income: {},
     budgets: {},
     expenses: [],
-    categories: [...DEFAULT_CATEGORIES],
+    categories: [],
   }
 }
 
@@ -59,8 +46,7 @@ function normalizeCategories(categories) {
   const cleaned = list
     .filter((item) => typeof item === 'string' && item.trim())
     .map((item) => item.trim())
-  const merged = [...DEFAULT_CATEGORIES, ...cleaned]
-  return [...new Set(merged)]
+  return [...new Set(cleaned)]
 }
 
 function normalizeBudgets(budgets) {
@@ -138,16 +124,39 @@ export async function loadData() {
       .maybeSingle()
 
     if (error) throw error
-    if (record?.payload) return normalizeData(record.payload)
+    const payloadData = normalizeData(record?.payload || localData)
+    const { data: categoryRows, error: categoryError } = await supabase
+      .from('expense_categories')
+      .select('name')
+      .eq('user_id', user.id)
+      .order('name')
 
-    if (localData.expenses.length || Object.keys(localData.income).length) {
-      await saveData(localData)
+    if (categoryError) throw categoryError
+    const storedCategories = categoryRows.map((row) => row.name)
+    const categories = [...new Set([...storedCategories, ...payloadData.categories])]
+    const loadedData = { ...payloadData, categories }
+
+    if (!categoryRows.length && payloadData.categories.length) {
+      await saveCategories(user.id, payloadData.categories)
     }
-    return localData
+
+    if (!record?.payload && (localData.expenses.length || Object.keys(localData.income).length)) {
+      await saveData(loadedData)
+    }
+    return loadedData
   } catch (error) {
     console.warn('Supabase load failed; using local data.', error)
     return localData
   }
+}
+
+async function saveCategories(userId, categories) {
+  if (!categories.length) return
+  const { error } = await supabase.from('expense_categories').upsert(
+    categories.map((name) => ({ user_id: userId, name })),
+    { onConflict: 'user_id,name', ignoreDuplicates: true },
+  )
+  if (error) throw error
 }
 
 export async function saveData(data) {
@@ -159,6 +168,7 @@ export async function saveData(data) {
 
   try {
     const user = await getSupabaseUser()
+    await saveCategories(user.id, normalized.categories)
     const { error } = await supabase.from('expense_tracker_data').upsert({
       user_id: user.id,
       payload: normalized,

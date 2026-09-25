@@ -8,7 +8,7 @@ export default function ExpenseForm({
   onCancel,
 }) {
   const [amount, setAmount] = useState(initial?.amount ? String(initial.amount) : '')
-  const [category, setCategory] = useState(initial?.category || categories[0] || 'Other')
+  const [category, setCategory] = useState(initial?.category || categories[0] || '')
   const [date, setDate] = useState(initial?.date || todayISO())
   const [note, setNote] = useState(initial?.note || '')
   const [error, setError] = useState('')

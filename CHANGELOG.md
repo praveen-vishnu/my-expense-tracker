@@ -11,6 +11,15 @@ This project follows [Semantic Versioning](https://semver.org/).
 - Recurring expenses and detailed EMI tracking
 - Reports and charts
 
+## [1.3.0] - 2026-09-25
+
+### Changed
+
+- Moved expense categories from frontend constants into the Supabase database.
+- Added per-user category storage with row-level security.
+- Added database seeding for starter categories on new accounts.
+- Added migration support for categories already stored in existing payloads.
+
 ## [1.2.0] - 2026-09-25
 
 ### Added

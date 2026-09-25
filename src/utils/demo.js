@@ -1,5 +1,4 @@
 import { createId, daysInMonth } from './formatting.js'
-import { DEFAULT_CATEGORIES } from './storage.js'
 
 function day(monthKey, n, maxDay) {
   const safe = Math.min(n, maxDay)
@@ -36,7 +35,7 @@ export function buildDemoData(monthKey) {
   return {
     version: 1,
     income: { [monthKey]: 80000 },
-    categories: [...DEFAULT_CATEGORIES],
+    categories: [...new Set(expenses.map((expense) => expense.category))],
     expenses: expenses.map((expense) => ({
       id: createId(),
       ...expense,

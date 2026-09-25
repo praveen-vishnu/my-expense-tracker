@@ -53,5 +53,7 @@ git push origin vX.Y.Z
 - The deployed app can sign in, save an income, save an expense, and load data after refresh.
 - The deployed app can set a monthly budget and show budget usage after refresh.
 - The deployed app can search and filter expense history by category, dates, and amount.
+- The latest `supabase/schema.sql` has been run, including the `expense_categories` table and policies.
+- New accounts receive starter categories from the database seed trigger.
 - The Vercel deployment uses the intended commit.
 - The changelog and package version match the release tag.
