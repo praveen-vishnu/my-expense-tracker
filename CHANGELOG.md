@@ -8,9 +8,16 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Planned
 
-- Search and expense filters
 - Recurring expenses and detailed EMI tracking
 - Reports and charts
+
+## [1.2.0] - 2026-09-25
+
+### Added
+
+- Expense history search by category and note.
+- Category, date-range, minimum amount, and maximum amount filters.
+- One-click filter reset and no-match feedback.
 
 ## [1.1.0] - 2026-09-25
 
