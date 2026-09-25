@@ -1,0 +1,36 @@
+# Supabase setup
+
+## 1. Create the table
+
+Open the Supabase project SQL Editor and run [`supabase/schema.sql`](supabase/schema.sql).
+
+The app stores one JSON document per user in `expense_tracker_data`. Row-level security allows a user to read and write only their own row.
+
+## 2. Enable anonymous sign-in
+
+In Supabase, open **Authentication > Providers**, enable **Anonymous** sign-ins, and save.
+
+The app uses an anonymous auth user so no login screen is required. The Supabase client persists that session in the browser, so the same browser continues to see the same data.
+
+## 3. Add local environment variables
+
+Copy `.env.example` to `.env.local` and fill in the project values from **Project Settings > API**:
+
+```env
+VITE_SUPABASE_URL=https://your-project-ref.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
+```
+
+Restart Vite after changing environment variables:
+
+```powershell
+npm run dev
+```
+
+Use only the Supabase **anon** key in this frontend. Never put the service-role key in `.env.local` or commit it.
+
+## 4. Deploying
+
+Add the same `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` values to the hosting provider's environment settings, then rebuild and deploy.
+
+If the variables are missing or Supabase is unavailable, the app falls back to its existing browser `localStorage` behavior.

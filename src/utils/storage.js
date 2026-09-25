@@ -1,4 +1,5 @@
 import { isValidDate, isValidMonthKey } from './formatting.js'
+import { isSupabaseConfigured, supabase } from './supabase.js'
 
 export const STORAGE_KEY = 'expenseTracker'
 export const DATA_VERSION = 1
@@ -81,7 +82,7 @@ export function normalizeData(raw) {
   }
 }
 
-export function loadData() {
+function loadLocalData() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return emptyData()
@@ -91,12 +92,70 @@ export function loadData() {
   }
 }
 
-export function saveData(data) {
+function saveLocalData(data) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeData(data)))
     return true
   } catch {
     return false
+  }
+}
+
+async function getSupabaseUser() {
+  if (!isSupabaseConfigured) return null
+
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+  if (sessionError) throw sessionError
+
+  if (sessionData.session?.user) return sessionData.session.user
+
+  const { data, error } = await supabase.auth.signInAnonymously()
+  if (error) throw error
+  return data.user
+}
+
+export async function loadData() {
+  const localData = loadLocalData()
+  if (!isSupabaseConfigured) return localData
+
+  try {
+    const user = await getSupabaseUser()
+    const { data: record, error } = await supabase
+      .from('expense_tracker_data')
+      .select('payload')
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    if (error) throw error
+    if (record?.payload) return normalizeData(record.payload)
+
+    if (localData.expenses.length || Object.keys(localData.income).length) {
+      await saveData(localData)
+    }
+    return localData
+  } catch (error) {
+    console.warn('Supabase load failed; using local data.', error)
+    return localData
+  }
+}
+
+export async function saveData(data) {
+  const normalized = normalizeData(data)
+  const localSaved = saveLocalData(normalized)
+  if (!isSupabaseConfigured) return localSaved
+
+  try {
+    const user = await getSupabaseUser()
+    const { error } = await supabase.from('expense_tracker_data').upsert({
+      user_id: user.id,
+      payload: normalized,
+      updated_at: new Date().toISOString(),
+    })
+    if (error) throw error
+    return true
+  } catch (error) {
+    console.warn('Supabase save failed; data remains local.', error)
+    return localSaved
   }
 }
 

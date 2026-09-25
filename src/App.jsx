@@ -20,7 +20,8 @@ const PAGES = [
 ]
 
 export default function App() {
-  const [data, setData] = useState(() => loadData())
+  const [data, setData] = useState(() => emptyData())
+  const [ready, setReady] = useState(false)
   const [month, setMonth] = useState(() => currentMonthKey())
   const [page, setPage] = useState('dashboard')
   const [expenseForm, setExpenseForm] = useState(null)
@@ -28,10 +29,26 @@ export default function App() {
   const [confirm, setConfirm] = useState(null)
 
   useEffect(() => {
-    saveData(data)
-  }, [data])
+    let active = true
+    loadData().then((loadedData) => {
+      if (!active) return
+      setData(loadedData)
+      setReady(true)
+    })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (ready) saveData(data)
+  }, [data, ready])
 
   const summary = useMemo(() => monthSummary(data, month), [data, month])
+
+  if (!ready) {
+    return <div className="loading-state">Loading your tracker...</div>
+  }
 
   function upsertExpense(fields, existing) {
     if (!isValidDate(fields.date)) return
