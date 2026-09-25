@@ -10,6 +10,7 @@ import Settings from './pages/Settings.jsx'
 import { monthSummary } from './utils/calculations.js'
 import { createId, currentMonthKey, isValidDate } from './utils/formatting.js'
 import { emptyData, loadData, saveData } from './utils/storage.js'
+import { isSupabaseConfigured } from './utils/supabase.js'
 import { buildDemoData } from './utils/demo.js'
 
 const PAGES = [
@@ -22,6 +23,7 @@ const PAGES = [
 export default function App() {
   const [data, setData] = useState(() => emptyData())
   const [ready, setReady] = useState(false)
+  const [syncStatus, setSyncStatus] = useState('checking')
   const [month, setMonth] = useState(() => currentMonthKey())
   const [page, setPage] = useState('dashboard')
   const [expenseForm, setExpenseForm] = useState(null)
@@ -34,6 +36,7 @@ export default function App() {
       if (!active) return
       setData(loadedData)
       setReady(true)
+      setSyncStatus(isSupabaseConfigured ? 'cloud' : 'local')
     })
     return () => {
       active = false
@@ -41,7 +44,11 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    if (ready) saveData(data)
+    if (!ready) return
+    setSyncStatus('saving')
+    saveData(data).then((result) => {
+      setSyncStatus(result.remoteSaved ? 'cloud' : 'local')
+    })
   }, [data, ready])
 
   const summary = useMemo(() => monthSummary(data, month), [data, month])
@@ -100,7 +107,18 @@ export default function App() {
       <header className="topbar">
         <div className="brand">
           <span>Khaata</span>
-          <small>Personal spending</small>
+          <small>
+            Personal spending ·{' '}
+            <span className={`sync-status sync-${syncStatus}`}>
+              {syncStatus === 'cloud'
+                ? 'Saved to cloud'
+                : syncStatus === 'saving'
+                  ? 'Saving...'
+                  : syncStatus === 'checking'
+                    ? 'Checking sync...'
+                    : 'Saved on this device'}
+            </span>
+          </small>
         </div>
         <MonthSelector month={month} onChange={setMonth} />
         <button type="button" className="btn btn-primary add-desktop" onClick={() => setExpenseForm({})}>

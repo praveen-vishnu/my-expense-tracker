@@ -143,7 +143,9 @@ export async function loadData() {
 export async function saveData(data) {
   const normalized = normalizeData(data)
   const localSaved = saveLocalData(normalized)
-  if (!isSupabaseConfigured) return localSaved
+  if (!isSupabaseConfigured) {
+    return { localSaved, remoteSaved: false, error: 'Supabase environment variables are missing.' }
+  }
 
   try {
     const user = await getSupabaseUser()
@@ -153,10 +155,10 @@ export async function saveData(data) {
       updated_at: new Date().toISOString(),
     })
     if (error) throw error
-    return true
+    return { localSaved, remoteSaved: true, error: null }
   } catch (error) {
     console.warn('Supabase save failed; data remains local.', error)
-    return localSaved
+    return { localSaved, remoteSaved: false, error: error.message || 'Supabase save failed.' }
   }
 }
 

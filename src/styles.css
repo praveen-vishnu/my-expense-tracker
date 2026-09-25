@@ -96,6 +96,23 @@ h2 {
   font-size: 0.8rem;
 }
 
+.sync-status {
+  font-weight: 600;
+}
+
+.sync-cloud {
+  color: var(--pine);
+}
+
+.sync-saving {
+  color: #a56a1b;
+}
+
+.sync-local,
+.sync-checking {
+  color: var(--spent);
+}
+
 .month-selector {
   display: flex;
   align-items: center;
