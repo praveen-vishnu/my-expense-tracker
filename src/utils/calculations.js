@@ -70,6 +70,7 @@ export function groupExpensesByDate(expenses) {
 export function monthSummary(data, monthKey, now = new Date()) {
   const monthExpenses = expensesForMonth(data.expenses, monthKey)
   const income = incomeForMonth(data.income, monthKey)
+  const budget = Number(data.budgets?.[monthKey]) || 0
   const spent = sumExpenses(monthExpenses)
   const count = monthExpenses.length
   const elapsedDays = elapsedDaysInMonth(monthKey, now)
@@ -77,7 +78,10 @@ export function monthSummary(data, monthKey, now = new Date()) {
   return {
     monthKey,
     income,
+    budget,
     spent,
+    budgetRemaining: budget - spent,
+    budgetPercent: budget ? (spent / budget) * 100 : 0,
     remaining: remainingBalance(income, spent),
     expenses: monthExpenses,
     count,

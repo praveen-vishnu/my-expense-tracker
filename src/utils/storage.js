@@ -21,6 +21,7 @@ export function emptyData() {
   return {
     version: DATA_VERSION,
     income: {},
+    budgets: {},
     expenses: [],
     categories: [...DEFAULT_CATEGORIES],
   }
@@ -62,6 +63,17 @@ function normalizeCategories(categories) {
   return [...new Set(merged)]
 }
 
+function normalizeBudgets(budgets) {
+  if (!budgets || typeof budgets !== 'object' || Array.isArray(budgets)) return {}
+  const next = {}
+  for (const [month, amount] of Object.entries(budgets)) {
+    if (!isValidMonthKey(month)) continue
+    const value = Number(amount)
+    if (Number.isFinite(value) && value > 0) next[month] = value
+  }
+  return next
+}
+
 export function normalizeData(raw) {
   if (!raw || typeof raw !== 'object') return emptyData()
 
@@ -78,6 +90,7 @@ export function normalizeData(raw) {
   return {
     version: DATA_VERSION,
     income: normalizeIncome(raw.income),
+    budgets: normalizeBudgets(raw.budgets),
     expenses,
     categories: normalizeCategories(raw.categories),
   }

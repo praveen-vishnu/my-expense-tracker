@@ -1,5 +1,6 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { parseImportedJson } from '../utils/storage.js'
+import { formatINR, formatMonthLabel, parseAmount } from '../utils/formatting.js'
 
 export default function Settings({
   data,
@@ -9,11 +10,19 @@ export default function Settings({
   onClear,
   onLoadDemo,
   onAddCategory,
+  month,
+  budget = 0,
+  onSaveBudget,
 }) {
   const fileRef = useRef(null)
   const [categoryName, setCategoryName] = useState('')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [budgetInput, setBudgetInput] = useState(budget ? String(budget) : '')
+
+  useEffect(() => {
+    setBudgetInput(budget ? String(budget) : '')
+  }, [month, budget])
 
   function exportData() {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
@@ -63,6 +72,19 @@ export default function Settings({
     setMessage(`Added ${name}.`)
   }
 
+  function handleBudgetSubmit(event) {
+    event.preventDefault()
+    const value = parseAmount(budgetInput)
+    if (!Number.isFinite(value) || value <= 0) {
+      setError('Enter a monthly budget greater than zero.')
+      setMessage('')
+      return
+    }
+    onSaveBudget(value)
+    setError('')
+    setMessage(`Monthly budget set to ${formatINR(value)}.`)
+  }
+
   return (
     <div className="page">
       <header className="page-intro">
@@ -81,6 +103,29 @@ export default function Settings({
           </button>
         </section>
       ) : null}
+
+      <section className="panel stack">
+        <div>
+          <h2>Monthly budget</h2>
+          <p className="muted">Set a spending limit for {formatMonthLabel(month)}.</p>
+        </div>
+        <form className="inline-form" onSubmit={handleBudgetSubmit}>
+          <label className="field">
+            <span>Budget amount</span>
+            <div className="amount-input">
+              <span>₹</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={budgetInput}
+                onChange={(event) => setBudgetInput(event.target.value)}
+                placeholder="50000"
+              />
+            </div>
+          </label>
+          <button type="submit" className="btn btn-secondary">Save budget</button>
+        </form>
+      </section>
 
       <section className="panel stack">
         <h2>Data</h2>

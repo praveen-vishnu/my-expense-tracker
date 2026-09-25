@@ -62,6 +62,32 @@ export default function Dashboard({
         </article>
       </section>
 
+      <section className={`budget-panel ${summary.budget && summary.spent > summary.budget ? 'over-budget' : ''}`}>
+        <div className="panel-head">
+          <div>
+            <h2>Monthly budget</h2>
+            <p className="muted">
+              {summary.budget ? `${formatINR(summary.spent)} of ${formatINR(summary.budget)} used` : 'Set a budget to track your pace.'}
+            </p>
+          </div>
+          <span className="budget-amount money">
+            {summary.budget ? formatINR(Math.max(summary.budgetRemaining, 0)) : 'Not set'}
+          </span>
+        </div>
+        {summary.budget ? (
+          <>
+            <div className="budget-track" aria-hidden="true">
+              <div className="budget-fill" style={{ width: `${Math.min(summary.budgetPercent, 100)}%` }} />
+            </div>
+            <p className={`budget-caption ${summary.budgetRemaining < 0 ? 'negative' : 'muted'}`}>
+              {summary.budgetRemaining < 0
+                ? `${formatINR(Math.abs(summary.budgetRemaining))} over budget`
+                : `${Math.round(summary.budgetPercent)}% used`}
+            </p>
+          </>
+        ) : null}
+      </section>
+
       <section className="panel">
         <div className="panel-head">
           <h2>Spending by category</h2>

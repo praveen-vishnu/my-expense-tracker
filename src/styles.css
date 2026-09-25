@@ -308,6 +308,50 @@ h2 {
   border-color: rgb(22 117 101 / 0.24);
 }
 
+.budget-panel {
+  padding: 1.2rem 1.35rem;
+  background: rgb(255 253 248 / 0.72);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.budget-panel .panel-head {
+  margin-bottom: 0.8rem;
+}
+
+.budget-panel.over-budget {
+  border-color: rgb(177 77 63 / 0.35);
+  background: #fff5f1;
+}
+
+.budget-amount {
+  font-size: 1.1rem;
+}
+
+.budget-track {
+  height: 10px;
+  overflow: hidden;
+  background: #e6e5dc;
+  border-radius: 999px;
+}
+
+.budget-fill {
+  height: 100%;
+  background: var(--pine);
+  border-radius: inherit;
+  transition: width 400ms ease, background 160ms ease;
+}
+
+.over-budget .budget-fill {
+  background: var(--spent);
+}
+
+.budget-caption {
+  margin-top: 0.45rem;
+  font-size: 0.85rem;
+}
+
 .money {
   font-family: var(--mono);
   font-weight: 600;

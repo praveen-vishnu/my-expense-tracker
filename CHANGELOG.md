@@ -8,10 +8,17 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Planned
 
-- Monthly budgets
 - Search and expense filters
 - Recurring expenses and detailed EMI tracking
 - Reports and charts
+
+## [1.1.0] - 2026-09-25
+
+### Added
+
+- Monthly budgets stored per month and synced with the user's cloud data.
+- Dashboard budget progress, remaining budget, and over-budget warning.
+- Monthly budget editing from Settings.
 
 ## [1.0.0] - 2026-09-25
 

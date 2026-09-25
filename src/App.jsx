@@ -232,6 +232,14 @@ export default function App() {
         {page === 'settings' ? (
           <Settings
             data={data}
+            month={month}
+            budget={summary.budget}
+            onSaveBudget={(amount) =>
+              setData((current) => ({
+                ...current,
+                budgets: { ...current.budgets, [month]: amount },
+              }))
+            }
             accountEmail={isSupabaseConfigured ? authUser.email : null}
             onSignOut={() => supabase.auth.signOut()}
             onImport={(next) => setData(next)}
