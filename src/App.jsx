@@ -7,10 +7,11 @@ import Dashboard from './pages/Dashboard.jsx'
 import History from './pages/History.jsx'
 import Review from './pages/Review.jsx'
 import Settings from './pages/Settings.jsx'
+import AuthForm from './components/AuthForm.jsx'
 import { monthSummary } from './utils/calculations.js'
 import { createId, currentMonthKey, isValidDate } from './utils/formatting.js'
 import { emptyData, loadData, saveData } from './utils/storage.js'
-import { isSupabaseConfigured } from './utils/supabase.js'
+import { isSupabaseConfigured, supabase } from './utils/supabase.js'
 import { buildDemoData } from './utils/demo.js'
 
 const PAGES = [
@@ -22,6 +23,8 @@ const PAGES = [
 
 export default function App() {
   const [data, setData] = useState(() => emptyData())
+  const [authReady, setAuthReady] = useState(false)
+  const [authUser, setAuthUser] = useState(null)
   const [ready, setReady] = useState(false)
   const [syncStatus, setSyncStatus] = useState('checking')
   const [month, setMonth] = useState(() => currentMonthKey())
@@ -31,7 +34,38 @@ export default function App() {
   const [confirm, setConfirm] = useState(null)
 
   useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setAuthUser({ id: 'local-user' })
+      setAuthReady(true)
+      return undefined
+    }
+
     let active = true
+    supabase.auth.getSession().then(({ data: sessionData }) => {
+      if (!active) return
+      const user = sessionData.session?.user
+      if (user?.is_anonymous) {
+        supabase.auth.signOut()
+        setAuthUser(null)
+      } else {
+        setAuthUser(user || null)
+      }
+      setAuthReady(true)
+    })
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthUser(session?.user?.is_anonymous ? null : session?.user || null)
+    })
+
+    return () => {
+      active = false
+      listener.subscription.unsubscribe()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!authReady || !authUser) return undefined
+    let active = true
+    setReady(false)
     loadData().then((loadedData) => {
       if (!active) return
       setData(loadedData)
@@ -41,7 +75,7 @@ export default function App() {
     return () => {
       active = false
     }
-  }, [])
+  }, [authReady, authUser])
 
   useEffect(() => {
     if (!ready) return
@@ -52,6 +86,14 @@ export default function App() {
   }, [data, ready])
 
   const summary = useMemo(() => monthSummary(data, month), [data, month])
+
+  if (!authReady) {
+    return <div className="loading-state">Checking your account...</div>
+  }
+
+  if (isSupabaseConfigured && !authUser) {
+    return <AuthForm onAuthenticated={setAuthUser} />
+  }
 
   if (!ready) {
     return <div className="loading-state">Loading your tracker...</div>

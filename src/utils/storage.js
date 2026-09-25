@@ -109,10 +109,7 @@ async function getSupabaseUser() {
   if (sessionError) throw sessionError
 
   if (sessionData.session?.user) return sessionData.session.user
-
-  const { data, error } = await supabase.auth.signInAnonymously()
-  if (error) throw error
-  return data.user
+  throw new Error('You must sign in before using cloud storage.')
 }
 
 export async function loadData() {

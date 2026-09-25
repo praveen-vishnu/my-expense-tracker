@@ -6,11 +6,11 @@ Open the Supabase project SQL Editor and run [`supabase/schema.sql`](supabase/sc
 
 The app stores one JSON document per user in `expense_tracker_data`. Row-level security allows a user to read and write only their own row.
 
-## 2. Enable anonymous sign-in
+## 2. Enable email authentication
 
-In Supabase, open **Authentication > Providers**, enable **Anonymous** sign-ins, and save.
+In Supabase, open **Authentication > Providers**, enable **Email**, and save.
 
-The app uses an anonymous auth user so no login screen is required. The Supabase client persists that session in the browser, so the same browser continues to see the same data.
+The app uses email/password accounts so the same user can access their data from different browsers and devices. For a simpler first login, you can disable email confirmation in the provider settings; otherwise users must confirm their email before signing in.
 
 ## 3. Add local environment variables
 
