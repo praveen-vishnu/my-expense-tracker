@@ -8,8 +8,16 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ### Planned
 
-- Recurring expenses and detailed EMI tracking
 - Reports and charts
+
+## [1.4.0] - 2026-09-25
+
+### Added
+
+- Recurring monthly expense schedules.
+- EMI schedules with installment counts and automatic stop dates.
+- Automatic monthly expense generation without duplicate entries.
+- Recurring schedule management from Settings.
 
 ## [1.3.0] - 2026-09-25
 

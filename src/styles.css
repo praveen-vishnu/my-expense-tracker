@@ -718,6 +718,46 @@ h2 {
   min-width: 12rem;
 }
 
+.recurring-form {
+  display: grid;
+  grid-template-columns: 2fr 1.2fr 1.4fr 0.9fr 1.1fr 1.1fr;
+  align-items: end;
+  gap: 0.7rem;
+}
+
+.recurring-form .btn {
+  min-height: 46px;
+}
+
+.schedule-list {
+  display: grid;
+  gap: 0.7rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.schedule-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--line);
+}
+
+.schedule-list small {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--muted);
+}
+
+.schedule-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
 .fab {
   position: fixed;
   right: 1rem;
@@ -788,6 +828,23 @@ h2 {
   .filter-search,
   .clear-filters {
     grid-column: 1 / -1;
+  }
+
+  .recurring-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .recurring-form .field:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .recurring-form .btn {
+    grid-column: 1 / -1;
+  }
+
+  .schedule-list li {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 

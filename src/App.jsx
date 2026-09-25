@@ -13,6 +13,7 @@ import { createId, currentMonthKey, isValidDate } from './utils/formatting.js'
 import { emptyData, loadData, saveData } from './utils/storage.js'
 import { isSupabaseConfigured, supabase } from './utils/supabase.js'
 import { buildDemoData } from './utils/demo.js'
+import { addRecurringExpenses } from './utils/recurring.js'
 
 const PAGES = [
   { id: 'dashboard', label: 'Dashboard' },
@@ -87,6 +88,11 @@ export default function App() {
     })
   }, [data, ready])
 
+  useEffect(() => {
+    if (!ready) return
+    setData((current) => addRecurringExpenses(current, month))
+  }, [data.recurringExpenses, month, ready])
+
   const summary = useMemo(() => monthSummary(data, month), [data, month])
 
   if (!authReady) {
@@ -146,6 +152,21 @@ export default function App() {
     setData((current) => ({
       ...current,
       expenses: current.expenses.filter((item) => item.id !== expense.id),
+    }))
+    setConfirm(null)
+  }
+
+  function addRecurringExpense(schedule) {
+    setData((current) => ({
+      ...current,
+      recurringExpenses: [...current.recurringExpenses, schedule],
+    }))
+  }
+
+  function deleteRecurringExpense(schedule) {
+    setData((current) => ({
+      ...current,
+      recurringExpenses: current.recurringExpenses.filter((item) => item.id !== schedule.id),
     }))
     setConfirm(null)
   }
@@ -273,6 +294,15 @@ export default function App() {
                 ...current,
                 categories: [...current.categories, name],
               }))
+            }
+            onAddRecurring={addRecurringExpense}
+            onDeleteRecurring={(schedule) =>
+              setConfirm({
+                title: 'Remove recurring expense?',
+                message: `${schedule.name} will no longer be generated in future months. Existing expenses will remain.`,
+                confirmLabel: 'Remove schedule',
+                onConfirm: () => deleteRecurringExpense(schedule),
+              })
             }
           />
         ) : null}

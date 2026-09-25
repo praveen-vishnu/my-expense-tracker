@@ -9,6 +9,7 @@ export function emptyData() {
     version: DATA_VERSION,
     income: {},
     budgets: {},
+    recurringExpenses: [],
     expenses: [],
     categories: [],
   }
@@ -60,6 +61,40 @@ function normalizeBudgets(budgets) {
   return next
 }
 
+function normalizeRecurringExpenses(recurringExpenses) {
+  if (!Array.isArray(recurringExpenses)) return []
+  return recurringExpenses
+    .filter((schedule) => (
+      schedule &&
+      typeof schedule.id === 'string' &&
+      schedule.id &&
+      typeof schedule.name === 'string' &&
+      schedule.name.trim() &&
+      typeof schedule.amount === 'number' &&
+      Number.isFinite(schedule.amount) &&
+      schedule.amount > 0 &&
+      typeof schedule.category === 'string' &&
+      schedule.category.trim() &&
+      Number.isInteger(schedule.day) &&
+      schedule.day >= 1 &&
+      schedule.day <= 31 &&
+      isValidMonthKey(schedule.startMonth) &&
+      (schedule.kind === 'monthly' || schedule.kind === 'emi') &&
+      (schedule.kind === 'monthly' || (Number.isInteger(schedule.installments) && schedule.installments > 0))
+    ))
+    .map((schedule) => ({
+      id: schedule.id,
+      name: schedule.name.trim(),
+      amount: schedule.amount,
+      category: schedule.category.trim(),
+      note: typeof schedule.note === 'string' ? schedule.note.trim() : '',
+      day: schedule.day,
+      startMonth: schedule.startMonth,
+      kind: schedule.kind,
+      installments: schedule.kind === 'emi' ? schedule.installments : null,
+    }))
+}
+
 export function normalizeData(raw) {
   if (!raw || typeof raw !== 'object') return emptyData()
 
@@ -70,6 +105,7 @@ export function normalizeData(raw) {
         category: expense.category.trim(),
         date: expense.date,
         note: expense.note ? String(expense.note) : '',
+        ...(typeof expense.recurringId === 'string' ? { recurringId: expense.recurringId } : {}),
       }))
     : []
 
@@ -77,6 +113,7 @@ export function normalizeData(raw) {
     version: DATA_VERSION,
     income: normalizeIncome(raw.income),
     budgets: normalizeBudgets(raw.budgets),
+    recurringExpenses: normalizeRecurringExpenses(raw.recurringExpenses),
     expenses,
     categories: normalizeCategories(raw.categories),
   }
