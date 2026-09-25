@@ -9,7 +9,6 @@ export default function Settings({
   onSignOut,
   onImport,
   onClear,
-  onLoadDemo,
   onAddCategory,
   month,
   budget = 0,
@@ -272,15 +271,6 @@ export default function Settings({
         </form>
       </section>
 
-      <section className="panel stack">
-        <h2>Demo data</h2>
-        <p className="muted">
-          Load a sample month so you can see the dashboard. This replaces your current data.
-        </p>
-        <button type="button" className="btn btn-secondary" onClick={onLoadDemo}>
-          Load demo month
-        </button>
-      </section>
     </div>
   )
 }

@@ -12,7 +12,6 @@ import { monthSummary } from './utils/calculations.js'
 import { createId, currentMonthKey, isValidDate } from './utils/formatting.js'
 import { emptyData, loadData, saveData } from './utils/storage.js'
 import { isSupabaseConfigured, supabase } from './utils/supabase.js'
-import { buildDemoData } from './utils/demo.js'
 import { addRecurringExpenses } from './utils/recurring.js'
 
 const PAGES = [
@@ -272,19 +271,6 @@ export default function App() {
                 confirmLabel: 'Delete Everything',
                 onConfirm: () => {
                   setData(emptyData())
-                  setConfirm(null)
-                },
-              })
-            }
-            onLoadDemo={() =>
-              setConfirm({
-                title: 'Load demo data?',
-                message: 'This replaces your current income and expenses with a sample month.',
-                confirmLabel: 'Load demo',
-                danger: false,
-                onConfirm: () => {
-                  setData(buildDemoData(month))
-                  setPage('dashboard')
                   setConfirm(null)
                 },
               })

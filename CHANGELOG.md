@@ -10,6 +10,12 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 - Reports and charts
 
+## [1.4.1] - 2026-09-25
+
+### Removed
+
+- Removed the Demo data section and its action from Settings.
+
 ## [1.4.0] - 2026-09-25
 
 ### Added
