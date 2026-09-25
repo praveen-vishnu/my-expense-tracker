@@ -25,6 +25,7 @@ export default function App() {
   const [data, setData] = useState(() => emptyData())
   const [authReady, setAuthReady] = useState(false)
   const [authUser, setAuthUser] = useState(null)
+  const [passwordRecovery, setPasswordRecovery] = useState(false)
   const [ready, setReady] = useState(false)
   const [syncStatus, setSyncStatus] = useState('checking')
   const [month, setMonth] = useState(() => currentMonthKey())
@@ -52,7 +53,8 @@ export default function App() {
       }
       setAuthReady(true)
     })
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') setPasswordRecovery(true)
       setAuthUser(session?.user?.is_anonymous ? null : session?.user || null)
     })
 
@@ -93,6 +95,10 @@ export default function App() {
 
   if (isSupabaseConfigured && !authUser) {
     return <AuthForm onAuthenticated={setAuthUser} />
+  }
+
+  if (passwordRecovery) {
+    return <AuthForm recovery onAuthenticated={() => setPasswordRecovery(false)} />
   }
 
   if (!ready) {
@@ -226,6 +232,8 @@ export default function App() {
         {page === 'settings' ? (
           <Settings
             data={data}
+            accountEmail={isSupabaseConfigured ? authUser.email : null}
+            onSignOut={() => supabase.auth.signOut()}
             onImport={(next) => setData(next)}
             onClear={() =>
               setConfirm({

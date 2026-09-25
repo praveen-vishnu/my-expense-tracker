@@ -3,6 +3,8 @@ import { parseImportedJson } from '../utils/storage.js'
 
 export default function Settings({
   data,
+  accountEmail,
+  onSignOut,
   onImport,
   onClear,
   onLoadDemo,
@@ -67,6 +69,18 @@ export default function Settings({
         <h1>Settings</h1>
         <p>Your data stays in this browser. Export a backup if you switch devices.</p>
       </header>
+
+      {accountEmail ? (
+        <section className="panel account-panel">
+          <div>
+            <h2>Account</h2>
+            <p className="muted">{accountEmail}</p>
+          </div>
+          <button type="button" className="btn btn-secondary" onClick={onSignOut}>
+            Sign out
+          </button>
+        </section>
+      ) : null}
 
       <section className="panel stack">
         <h2>Data</h2>
