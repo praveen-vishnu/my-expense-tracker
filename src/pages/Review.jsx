@@ -7,6 +7,7 @@ export default function Review({ summary }) {
     summary.spent > 0 && top.length
       ? `Most of it went to ${top.join(' + ')}.`
       : 'Add expenses to see where the money went.'
+  const chartMax = summary.categories.reduce((max, row) => Math.max(max, row.total), 0)
 
   return (
     <div className="page">
@@ -26,6 +27,32 @@ export default function Review({ summary }) {
           Remaining <strong className={`money ${summary.remaining < 0 ? 'negative' : 'positive'}`}>{formatINR(summary.remaining)}</strong>
         </p>
         <p className="story-line">{story}</p>
+      </section>
+
+      <section className="panel">
+        <div className="panel-head">
+          <h2>Spending breakdown</h2>
+        </div>
+        {summary.categories.length === 0 ? (
+          <p className="empty-inline">No spending recorded for {monthName}.</p>
+        ) : (
+          <div className="spending-chart" aria-label="Category spending chart">
+            {summary.categories.map((row) => (
+              <div key={row.category} className="chart-row">
+                <div className="chart-label-row">
+                  <span>{row.category}</span>
+                  <span className="money">{formatINR(row.total)}</span>
+                </div>
+                <div className="chart-track" aria-hidden="true">
+                  <div
+                    className="chart-fill"
+                    style={{ width: `${chartMax ? (row.total / chartMax) * 100 : 0}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="panel">

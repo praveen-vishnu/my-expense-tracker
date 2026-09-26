@@ -6,9 +6,15 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Planned
+### Added
 
-- Reports and charts
+- Spending breakdown chart on the monthly review page.
+
+## [1.5.0] - 2026-09-26
+
+### Added
+
+- Spending breakdown chart with a clear visual comparison across categories.
 
 ## [1.4.1] - 2026-09-25
 
