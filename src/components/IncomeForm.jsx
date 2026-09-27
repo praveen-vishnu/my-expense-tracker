@@ -1,54 +1,56 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { formatMonthLabel, parseAmount } from '../utils/formatting.js'
+import ModalSheet from './ModalSheet.jsx'
 
 export default function IncomeForm({ month, initialAmount = '', onSave, onCancel }) {
   const [amount, setAmount] = useState(initialAmount ? String(initialAmount) : '')
-  const [error, setError] = useState('')
+  const [error, setError] = useState(null)
+  const amountRef = useRef(null)
   const isEdit = Boolean(initialAmount)
 
   function handleSubmit(event) {
     event.preventDefault()
     const value = parseAmount(amount)
     if (!Number.isFinite(value) || value <= 0) {
-      setError('Enter an income amount greater than zero.')
+      setError({ field: 'amount', message: 'Enter an income amount greater than zero.' })
+      amountRef.current?.focus()
       return
     }
     onSave(value)
   }
 
   return (
-    <div className="overlay" role="presentation" onClick={onCancel}>
-      <form
-        className="sheet"
-        onSubmit={handleSubmit}
-        onClick={(event) => event.stopPropagation()}
-      >
+    <ModalSheet titleId="income-form-title" descriptionId="income-form-month" initialFocusRef={amountRef} onDismiss={onCancel}>
+      <form className="sheet-form" noValidate onSubmit={handleSubmit}>
         <div className="sheet-head">
-          <h2>{isEdit ? 'Edit Income' : 'Add Income'}</h2>
+          <h2 id="income-form-title">{isEdit ? 'Edit Income' : 'Add Income'}</h2>
           <button type="button" className="text-btn" onClick={onCancel}>
             Close
           </button>
         </div>
-        <p className="muted">{formatMonthLabel(month)}</p>
+        <p id="income-form-month" className="muted">{formatMonthLabel(month)}</p>
         <label className="field">
           <span>Monthly income</span>
           <div className="amount-input">
             <span>₹</span>
             <input
+              ref={amountRef}
               type="text"
               inputMode="decimal"
-              autoFocus
+              required
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? 'income-form-error' : undefined}
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
               placeholder="80000"
             />
           </div>
         </label>
-        {error ? <p className="form-error">{error}</p> : null}
+        {error ? <p id="income-form-error" className="form-error" role="alert">{error.message}</p> : null}
         <button type="submit" className="btn btn-primary btn-block">
           Save Income
         </button>
       </form>
-    </div>
+    </ModalSheet>
   )
 }

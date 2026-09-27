@@ -1,4 +1,5 @@
 import { formatINR, relativeDateLabel } from '../utils/formatting.js'
+import { IconTrash } from '@tabler/icons-react'
 
 export default function ExpenseList({ groups, onEdit, onDelete, emptyMessage }) {
   if (!groups.length) {
@@ -9,11 +10,19 @@ export default function ExpenseList({ groups, onEdit, onDelete, emptyMessage }) 
     <div className="expense-groups">
       {groups.map((group) => (
         <section key={group.date} className="expense-group">
-          <h3>{relativeDateLabel(group.date)}</h3>
+          <div className="expense-group-head">
+            <h3>{relativeDateLabel(group.date)}</h3>
+            <span>{group.items.length} {group.items.length === 1 ? 'expense' : 'expenses'} shown</span>
+          </div>
           <ul>
             {group.items.map((expense) => (
               <li key={expense.id}>
-                <button type="button" className="expense-row" onClick={() => onEdit(expense)}>
+                <button
+                  type="button"
+                  className="expense-row"
+                  aria-label={`Edit ${expense.category} expense for ${formatINR(expense.amount)}`}
+                  onClick={() => onEdit(expense)}
+                >
                   <span className="expense-meta">
                     <strong>{expense.category}</strong>
                     {expense.note ? <span>{expense.note}</span> : null}
@@ -22,10 +31,12 @@ export default function ExpenseList({ groups, onEdit, onDelete, emptyMessage }) 
                 </button>
                 <button
                   type="button"
-                  className="text-btn danger"
+                  className="expense-delete"
+                  aria-label={`Delete ${expense.category} expense for ${formatINR(expense.amount)}`}
+                  title="Delete expense"
                   onClick={() => onDelete(expense)}
                 >
-                  Delete
+                  <IconTrash size={18} stroke={1.75} aria-hidden="true" />
                 </button>
               </li>
             ))}

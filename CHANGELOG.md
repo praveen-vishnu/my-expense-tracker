@@ -6,9 +6,25 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-09-27
+
 ### Added
 
-- Spending breakdown chart on the monthly review page.
+- Accessible native modal sheets for adding and editing expenses and income, with contained keyboard focus, Escape dismissal, and focus restoration.
+- A skip-to-main-content link and current-page navigation state.
+- Live announcements for sync, authentication, form errors, and successful settings actions.
+
+### Changed
+
+- History filters now reflow without horizontal scrolling on phone and tablet widths.
+- Settings validation messages appear beside their own form, identify invalid fields, and move focus to the field that needs attention.
+- Recurring schedule removal buttons identify the schedule they affect to assistive technology.
+- Improved helper and sync-status text contrast, keyboard focus visibility, and reduced-motion behavior.
+
+### Fixed
+
+- Native date filters no longer exceed their grid columns on narrow screens.
+- Budget and recurring-schedule errors no longer appear in the unrelated Data section.
 
 ## [1.5.0] - 2026-09-26
 

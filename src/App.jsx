@@ -9,7 +9,7 @@ import Review from './pages/Review.jsx'
 import Settings from './pages/Settings.jsx'
 import AuthForm from './components/AuthForm.jsx'
 import { monthSummary } from './utils/calculations.js'
-import { createId, currentMonthKey, isValidDate } from './utils/formatting.js'
+import { createId, currentMonthKey, formatINR, isValidDate, relativeDateLabel } from './utils/formatting.js'
 import { emptyData, loadData, saveData } from './utils/storage.js'
 import { isSupabaseConfigured, supabase } from './utils/supabase.js'
 import { addRecurringExpenses } from './utils/recurring.js'
@@ -95,7 +95,7 @@ export default function App() {
   const summary = useMemo(() => monthSummary(data, month), [data, month])
 
   if (!authReady) {
-    return <div className="loading-state">Checking your account...</div>
+    return <div className="loading-state" role="status" aria-live="polite">Checking your account...</div>
   }
 
   if (isSupabaseConfigured && !authUser) {
@@ -107,7 +107,7 @@ export default function App() {
   }
 
   if (!ready) {
-    return <div className="loading-state">Loading your tracker...</div>
+    return <div className="loading-state" role="status" aria-live="polite">Loading your tracker...</div>
   }
 
   function upsertExpense(fields, existing) {
@@ -172,12 +172,13 @@ export default function App() {
 
   return (
     <div className="app">
+      <a className="skip-link" href="#main-content">Skip to main content</a>
       <header className="topbar">
         <div className="brand">
           <span>Khaata</span>
           <small>
             Personal spending ·{' '}
-            <span className={`sync-status sync-${syncStatus}`}>
+            <span className={`sync-status sync-${syncStatus}`} role="status" aria-live="polite" aria-atomic="true">
               {syncStatus === 'cloud'
                 ? 'Saved to cloud'
                 : syncStatus === 'saving'
@@ -200,6 +201,7 @@ export default function App() {
             key={item.id}
             type="button"
             className={page === item.id ? 'active' : ''}
+            aria-current={page === item.id ? 'page' : undefined}
             onClick={() => setPage(item.id)}
           >
             {item.label}
@@ -207,7 +209,7 @@ export default function App() {
         ))}
       </nav>
 
-      <main>
+      <main id="main-content" tabIndex="-1">
         {page === 'dashboard' ? (
           <Dashboard
             summary={summary}
@@ -216,8 +218,8 @@ export default function App() {
             onDeleteExpense={(expense) =>
               setConfirm({
                 title: 'Delete expense?',
-                message: `${expense.category}${expense.note ? ` (${expense.note})` : ''} will be removed.`,
-                confirmLabel: 'Delete',
+                message: `${expense.category}${expense.note ? ` (${expense.note})` : ''} expense for ${formatINR(expense.amount)} from ${relativeDateLabel(expense.date)} will be removed.`,
+                confirmLabel: 'Delete expense',
                 onConfirm: () => deleteExpense(expense),
               })
             }
@@ -241,8 +243,8 @@ export default function App() {
             onDeleteExpense={(expense) =>
               setConfirm({
                 title: 'Delete expense?',
-                message: `${expense.category}${expense.note ? ` (${expense.note})` : ''} will be removed.`,
-                confirmLabel: 'Delete',
+                message: `${expense.category}${expense.note ? ` (${expense.note})` : ''} expense for ${formatINR(expense.amount)} from ${relativeDateLabel(expense.date)} will be removed.`,
+                confirmLabel: 'Delete expense',
                 onConfirm: () => deleteExpense(expense),
               })
             }

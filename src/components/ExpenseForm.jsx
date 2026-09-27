@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { isValidDate, parseAmount, todayISO } from '../utils/formatting.js'
+import ModalSheet from './ModalSheet.jsx'
 
 export default function ExpenseForm({
   categories,
@@ -11,21 +12,27 @@ export default function ExpenseForm({
   const [category, setCategory] = useState(initial?.category || categories[0] || '')
   const [date, setDate] = useState(initial?.date || todayISO())
   const [note, setNote] = useState(initial?.note || '')
-  const [error, setError] = useState('')
+  const [error, setError] = useState(null)
+  const amountRef = useRef(null)
+  const categoryRef = useRef(null)
+  const dateRef = useRef(null)
 
   function handleSubmit(event) {
     event.preventDefault()
     const value = parseAmount(amount)
     if (!Number.isFinite(value) || value <= 0) {
-      setError('Enter an amount greater than zero.')
+      setError({ field: 'amount', message: 'Enter an amount greater than zero.' })
+      amountRef.current?.focus()
       return
     }
     if (!category) {
-      setError('Choose a category.')
+      setError({ field: 'category', message: 'Choose a category.' })
+      categoryRef.current?.focus()
       return
     }
     if (!isValidDate(date)) {
-      setError('Choose a valid date.')
+      setError({ field: 'date', message: 'Choose a valid date.' })
+      dateRef.current?.focus()
       return
     }
     setError('')
@@ -40,14 +47,10 @@ export default function ExpenseForm({
   const isEdit = Boolean(initial)
 
   return (
-    <div className="overlay" role="presentation" onClick={onCancel}>
-      <form
-        className="sheet"
-        onSubmit={handleSubmit}
-        onClick={(event) => event.stopPropagation()}
-      >
+    <ModalSheet titleId="expense-form-title" initialFocusRef={amountRef} onDismiss={onCancel}>
+      <form className="sheet-form" noValidate onSubmit={handleSubmit}>
         <div className="sheet-head">
-          <h2>{isEdit ? 'Edit Expense' : 'Add Expense'}</h2>
+          <h2 id="expense-form-title">{isEdit ? 'Edit Expense' : 'Add Expense'}</h2>
           <button type="button" className="text-btn" onClick={onCancel}>
             Close
           </button>
@@ -58,9 +61,12 @@ export default function ExpenseForm({
           <div className="amount-input">
             <span>₹</span>
             <input
+              ref={amountRef}
               type="text"
               inputMode="decimal"
-              autoFocus
+              required
+              aria-invalid={error?.field === 'amount'}
+              aria-describedby={error?.field === 'amount' ? 'expense-form-error' : undefined}
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
               placeholder="450"
@@ -70,7 +76,14 @@ export default function ExpenseForm({
 
         <label className="field">
           <span>Category</span>
-          <select value={category} onChange={(event) => setCategory(event.target.value)}>
+          <select
+            ref={categoryRef}
+            value={category}
+            required
+            aria-invalid={error?.field === 'category'}
+            aria-describedby={error?.field === 'category' ? 'expense-form-error' : undefined}
+            onChange={(event) => setCategory(event.target.value)}
+          >
             {categories.map((item) => (
               <option key={item} value={item}>
                 {item}
@@ -81,7 +94,15 @@ export default function ExpenseForm({
 
         <label className="field">
           <span>Date</span>
-          <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+          <input
+            ref={dateRef}
+            type="date"
+            value={date}
+            required
+            aria-invalid={error?.field === 'date'}
+            aria-describedby={error?.field === 'date' ? 'expense-form-error' : undefined}
+            onChange={(event) => setDate(event.target.value)}
+          />
         </label>
 
         <label className="field">
@@ -95,12 +116,12 @@ export default function ExpenseForm({
           />
         </label>
 
-        {error ? <p className="form-error">{error}</p> : null}
+        {error ? <p id="expense-form-error" className="form-error" role="alert">{error.message}</p> : null}
 
         <button type="submit" className="btn btn-primary btn-block">
           {isEdit ? 'Save Changes' : 'Save Expense'}
         </button>
       </form>
-    </div>
+    </ModalSheet>
   )
 }

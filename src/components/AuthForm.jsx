@@ -69,7 +69,7 @@ export default function AuthForm({ onAuthenticated, recovery = false }) {
             : 'Create an account to keep your tracker synced everywhere.'}
         </p>
 
-        <form className="auth-form" onSubmit={handleSubmit}>
+        <form className="auth-form" aria-busy={busy} onSubmit={handleSubmit}>
           <label className="field">
             <span>Email</span>
             <input
@@ -93,8 +93,8 @@ export default function AuthForm({ onAuthenticated, recovery = false }) {
               />
             </label>
           ) : null}
-          {error ? <p className="form-error">{error}</p> : null}
-          {message ? <p className="form-ok">{message}</p> : null}
+          {error ? <p id="auth-error" className="form-error" role="alert">{error}</p> : null}
+          {message ? <p id="auth-message" className="form-ok" role="status" aria-live="polite">{message}</p> : null}
           <button type="submit" className="btn btn-primary btn-block" disabled={busy}>
             {busy
               ? 'Please wait...'

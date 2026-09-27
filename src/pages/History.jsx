@@ -58,7 +58,7 @@ export default function History({
         <p>Every expense in {formatMonthLabel(month)}, grouped by date.</p>
       </header>
 
-      <div className="filters filter-grid">
+      <form className="filters filter-grid" role="search" aria-label="Filter expenses" onSubmit={(event) => event.preventDefault()}>
         <label className="field filter-search">
           <span>Search</span>
           <input
@@ -100,7 +100,7 @@ export default function History({
             Clear filters
           </button>
         ) : null}
-      </div>
+      </form>
 
       <section className="panel">
         <ExpenseList
