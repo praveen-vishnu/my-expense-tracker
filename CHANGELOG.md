@@ -6,25 +6,29 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [1.5.1] - 2026-09-27
+## [1.5.1] - 2026-10-03
 
 ### Added
 
 - Accessible native modal sheets for adding and editing expenses and income, with contained keyboard focus, Escape dismissal, and focus restoration.
 - A skip-to-main-content link and current-page navigation state.
 - Live announcements for sync, authentication, form errors, and successful settings actions.
+- Expense-specific edit/delete labels and recurring-schedule removal names for assistive technology.
 
 ### Changed
 
+- Recent expenses and History use a consistent, compact trash-icon action. Delete confirmation identifies the category, amount, and date before removing an expense.
+- Expense groups show the number of entries displayed, and transaction rows keep descriptions, amounts, and actions aligned.
 - History filters now reflow without horizontal scrolling on phone and tablet widths.
 - Settings validation messages appear beside their own form, identify invalid fields, and move focus to the field that needs attention.
-- Recurring schedule removal buttons identify the schedule they affect to assistive technology.
+- Responsive header spacing keeps the brand, sync status, month navigation, and add action legible across viewport widths.
 - Improved helper and sync-status text contrast, keyboard focus visibility, and reduced-motion behavior.
 
 ### Fixed
 
 - Native date filters no longer exceed their grid columns on narrow screens.
 - Budget and recurring-schedule errors no longer appear in the unrelated Data section.
+- The sync status no longer inherits wordmark typography or its decorative brand mark.
 
 ## [1.5.0] - 2026-09-26
 

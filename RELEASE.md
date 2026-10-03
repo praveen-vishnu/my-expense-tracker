@@ -56,5 +56,11 @@ git push origin vX.Y.Z
 - The latest `supabase/schema.sql` has been run, including the `expense_categories` table and policies.
 - New accounts receive starter categories from the database seed trigger.
 - The deployed app can create a monthly schedule and an EMI schedule, then generate the expected expense once per month.
+- Expense and income sheets keep keyboard focus contained, dismiss with Escape, and return focus to the opener.
+- Keyboard users can skip to main content, identify the active page, and see a high-contrast focus indicator.
+- History filters reflow without horizontal scrolling at phone and tablet widths.
+- Validation and sync feedback is announced, located beside the related form, and associated with invalid fields.
+- Expense delete actions identify the transaction and require confirmation in both Dashboard and History.
+- Reduced-motion preference disables non-essential interface transitions.
 - The Vercel deployment uses the intended commit.
 - The changelog and package version match the release tag.
