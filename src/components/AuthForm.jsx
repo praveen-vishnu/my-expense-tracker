@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { supabase } from '../utils/supabase.js'
+import ThemeToggle from './ThemeToggle.jsx'
 
-export default function AuthForm({ onAuthenticated, recovery = false }) {
+export default function AuthForm({ onAuthenticated, recovery = false, theme, onToggleTheme }) {
   const [mode, setMode] = useState('sign-in')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -54,6 +55,7 @@ export default function AuthForm({ onAuthenticated, recovery = false }) {
   return (
     <main className="auth-shell">
       <section className="auth-card">
+        <ThemeToggle className="auth-theme-toggle" theme={theme} onToggle={onToggleTheme} />
         <div className="auth-mark" aria-hidden="true" />
         <p className="eyebrow">Personal spending</p>
         <h1>

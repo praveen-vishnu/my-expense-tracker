@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import MonthSelector from './components/MonthSelector.jsx'
 import ExpenseForm from './components/ExpenseForm.jsx'
 import IncomeForm from './components/IncomeForm.jsx'
@@ -8,6 +8,7 @@ import History from './pages/History.jsx'
 import Review from './pages/Review.jsx'
 import Settings from './pages/Settings.jsx'
 import AuthForm from './components/AuthForm.jsx'
+import ThemeToggle from './components/ThemeToggle.jsx'
 import { monthSummary } from './utils/calculations.js'
 import { createId, currentMonthKey, formatINR, isValidDate, relativeDateLabel } from './utils/formatting.js'
 import { emptyData, loadData, saveData } from './utils/storage.js'
@@ -33,6 +34,22 @@ export default function App() {
   const [expenseForm, setExpenseForm] = useState(null)
   const [incomeForm, setIncomeForm] = useState(false)
   const [confirm, setConfirm] = useState(null)
+  const [theme, setTheme] = useState(() => {
+    try {
+      return localStorage.getItem('khaata-theme') === 'dark' ? 'dark' : 'light'
+    } catch {
+      return 'light'
+    }
+  })
+
+  useLayoutEffect(() => {
+    document.documentElement.dataset.theme = theme
+    try {
+      localStorage.setItem('khaata-theme', theme)
+    } catch {
+      return
+    }
+  }, [theme])
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -99,11 +116,11 @@ export default function App() {
   }
 
   if (isSupabaseConfigured && !authUser) {
-    return <AuthForm onAuthenticated={setAuthUser} />
+    return <AuthForm theme={theme} onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} onAuthenticated={setAuthUser} />
   }
 
   if (passwordRecovery) {
-    return <AuthForm recovery onAuthenticated={() => setPasswordRecovery(false)} />
+    return <AuthForm recovery theme={theme} onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} onAuthenticated={() => setPasswordRecovery(false)} />
   }
 
   if (!ready) {
@@ -190,9 +207,12 @@ export default function App() {
           </small>
         </div>
         <MonthSelector month={month} onChange={setMonth} />
-        <button type="button" className="btn btn-primary add-desktop" onClick={() => setExpenseForm({})}>
-          + Add Expense
-        </button>
+        <div className="topbar-actions">
+          <ThemeToggle theme={theme} onToggle={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} />
+          <button type="button" className="btn btn-primary add-desktop" onClick={() => setExpenseForm({})}>
+            + Add Expense
+          </button>
+        </div>
       </header>
 
       <nav className="tabs" aria-label="Main">

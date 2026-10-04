@@ -62,5 +62,6 @@ git push origin vX.Y.Z
 - Validation and sync feedback is announced, located beside the related form, and associated with invalid fields.
 - Expense delete actions identify the transaction and require confirmation in both Dashboard and History.
 - Reduced-motion preference disables non-essential interface transitions.
+- The light/dark theme switch updates Dashboard, History, Review, Settings, and authentication screens, and restores the saved choice after reload.
 - The Vercel deployment uses the intended commit.
 - The changelog and package version match the release tag.

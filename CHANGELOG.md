@@ -6,6 +6,13 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-04
+
+### Added
+
+- A persistent light/dark theme switch, available in the app header and on authentication and password-recovery screens.
+- Dark theme styling across the dashboard, expense history, monthly review, settings, forms, charts, and dialogs.
+
 ## [1.5.1] - 2026-10-03
 
 ### Added
