@@ -6,6 +6,19 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-10-09
+
+### Added
+- Granular Category-Level Budgets & Smart Threshold Alerts (`src/components/CategoryBudgetModal.jsx`):
+  - **Individual Category Budget Targets**: Set custom spending targets per expense category for any calendar month.
+  - **Smart Threshold Alert Banners**: Contextual alerts on the dashboard highlighting categories exceeding their allocation or consuming more than 85% of budget.
+  - **Category Budget Modal**: Full-featured interactive modal with remaining buffer calculation, spent amounts, and one-click budget cloning from the previous month.
+  - **Category Progress Pills & Color Coded Progress Bars**: Dashboard category breakdown displays live status pills (`on-track`, `warning`, `exceeded`) and matching dynamic color progress bars.
+  - **Quick Setup via Dashboard & Settings**: Access Category Budgets directly from the Dashboard header or from the Settings budget section.
+  - **Data Normalization & Persistence**: Extended client-side storage schema with `categoryBudgets` normalized per month and category in `storage.js` and `useTrackerData.js`.
+  - **Unit Test Coverage**: Automated tests verifying category budget consumption, remaining buffer, and alert triggers in `calculations.test.js` (11/11 tests passing).
+
+
 ## [1.11.0] - 2026-10-09
 
 ### Added

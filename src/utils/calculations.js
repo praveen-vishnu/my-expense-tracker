@@ -102,6 +102,43 @@ export function monthSummary(data, monthKey, now = new Date()) {
     }
   }
 
+  const categoryBudgetMap = data.categoryBudgets?.[monthKey] || {}
+  const rawCategories = categoryTotals(monthExpenses)
+
+  // Ensure categories with a budget set appear even if spent is 0
+  const categoryNamesSet = new Set(rawCategories.map((c) => c.category))
+  for (const catName of Object.keys(categoryBudgetMap)) {
+    if (!categoryNamesSet.has(catName)) {
+      rawCategories.push({ category: catName, total: 0 })
+    }
+  }
+
+  const enrichedCategories = rawCategories.map((item) => {
+    const catBudget = categoryBudgetMap[item.category] || null
+    if (catBudget == null || catBudget <= 0) {
+      return item
+    }
+
+    const remaining = catBudget - item.total
+    const percent = (item.total / catBudget) * 100
+    let status = 'on-track'
+    if (item.total > catBudget) {
+      status = 'exceeded'
+    } else if (percent >= 80) {
+      status = 'warning'
+    }
+
+    return {
+      ...item,
+      budget: catBudget,
+      remaining,
+      percent,
+      status,
+    }
+  })
+
+  const categoryAlerts = enrichedCategories.filter((c) => c.budget && (c.status === 'exceeded' || c.status === 'warning'))
+
   return {
     monthKey,
     income,
@@ -122,7 +159,9 @@ export function monthSummary(data, monthKey, now = new Date()) {
     projectedOverBudget,
     projectedExhaustionDay,
     burnRateStatus,
-    categories: categoryTotals(monthExpenses),
+    categories: enrichedCategories,
+    categoryAlerts,
+    categoryBudgets: categoryBudgetMap,
   }
 }
 

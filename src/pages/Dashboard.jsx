@@ -1,6 +1,7 @@
 import { formatINR, formatMonthLabel } from '../utils/formatting.js'
 import { groupExpensesByDate } from '../utils/calculations.js'
 import ExpenseList from '../components/ExpenseList.jsx'
+import { IconAlertTriangle, IconTarget } from '@tabler/icons-react'
 
 export default function Dashboard({
   summary,
@@ -11,6 +12,7 @@ export default function Dashboard({
   onAddIncome,
   onEditIncome,
   onDeleteIncome,
+  onOpenCategoryBudgets,
 }) {
   const maxCategory = summary.categories[0]?.total || 0
   const recent = groupExpensesByDate(summary.expenses).slice(0, 5)
@@ -147,9 +149,33 @@ export default function Dashboard({
             ) : null}
           </section>
 
+          {/* SMART CATEGORY BUDGET ALERTS */}
+          {summary.categoryAlerts && summary.categoryAlerts.length > 0 ? (
+            <div className="cat-alert-banner" role="alert">
+              <IconAlertTriangle size={18} className="cat-alert-icon" />
+              <div className="cat-alert-content">
+                <strong>Category Budget Alert:</strong>
+                <span>
+                  {summary.categoryAlerts
+                    .map((a) =>
+                      a.status === 'exceeded'
+                        ? `${a.category} (${formatINR(Math.abs(a.remaining))} over budget)`
+                        : `${a.category} (${Math.round(a.percent)}% used)`
+                    )
+                    .join(' · ')}
+                </span>
+              </div>
+            </div>
+          ) : null}
+
           <section className="panel">
             <div className="panel-head">
               <h2>Spending by category</h2>
+              {onOpenCategoryBudgets ? (
+                <button type="button" className="text-btn" onClick={onOpenCategoryBudgets}>
+                  Set Budgets
+                </button>
+              ) : null}
             </div>
             {summary.categories.length === 0 ? (
               <div className="empty-state">
@@ -161,27 +187,52 @@ export default function Dashboard({
               </div>
             ) : (
               <ul className="bars">
-                {summary.categories.map((row) => (
-                  <li key={row.category}>
-                    <div className="bar-meta">
-                      <span>{row.category}</span>
-                      <span className="money">{formatINR(row.total)}</span>
-                    </div>
-                    <div
-                      className="bar-track"
-                      role="progressbar"
-                      aria-label={`${row.category} spending ratio`}
-                      aria-valuenow={Math.round(maxCategory ? (row.total / maxCategory) * 100 : 0)}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                    >
+                {summary.categories.map((row) => {
+                  const hasBudget = row.budget != null && row.budget > 0
+                  const fillWidth = hasBudget
+                    ? Math.min(row.percent, 100)
+                    : maxCategory
+                      ? (row.total / maxCategory) * 100
+                      : 0
+
+                  return (
+                    <li key={row.category}>
+                      <div className="bar-meta">
+                        <span className="cat-label-wrap">
+                          <strong>{row.category}</strong>
+                          {hasBudget ? (
+                            <span
+                              className={`cat-budget-pill cat-budget-${row.status}`}
+                            >
+                              {row.status === 'exceeded'
+                                ? `+${formatINR(Math.abs(row.remaining))} over`
+                                : `${formatINR(row.remaining)} left`}
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className="money-budget-wrap">
+                          <span className="money">{formatINR(row.total)}</span>
+                          {hasBudget ? (
+                            <small className="budget-target-sub"> / {formatINR(row.budget)}</small>
+                          ) : null}
+                        </span>
+                      </div>
                       <div
-                        className="bar-fill"
-                        style={{ width: `${maxCategory ? (row.total / maxCategory) * 100 : 0}%` }}
-                      />
-                    </div>
-                  </li>
-                ))}
+                        className="bar-track"
+                        role="progressbar"
+                        aria-label={`${row.category} spending ratio`}
+                        aria-valuenow={Math.round(fillWidth)}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                      >
+                        <div
+                          className={`bar-fill ${hasBudget ? `bar-fill-${row.status}` : ''}`}
+                          style={{ width: `${fillWidth}%` }}
+                        />
+                      </div>
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </section>

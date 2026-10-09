@@ -4,6 +4,7 @@ import ExpenseForm from './components/ExpenseForm.jsx'
 import IncomeForm from './components/IncomeForm.jsx'
 import ConfirmDialog from './components/ConfirmDialog.jsx'
 import StatementImportModal from './components/StatementImportModal.jsx'
+import CategoryBudgetModal from './components/CategoryBudgetModal.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import History from './pages/History.jsx'
 import Review from './pages/Review.jsx'
@@ -32,6 +33,7 @@ export default function App() {
   const [expenseForm, setExpenseForm] = useState(null)
   const [incomeForm, setIncomeForm] = useState(false)
   const [statementModal, setStatementModal] = useState(false)
+  const [categoryBudgetModal, setCategoryBudgetModal] = useState(false)
   const [confirm, setConfirm] = useState(null)
 
   const {
@@ -46,6 +48,8 @@ export default function App() {
     saveIncome,
     deleteIncome,
     saveBudget,
+    saveCategoryBudget,
+    copyCategoryBudgets,
     addRecurringExpense,
     deleteRecurringExpense,
     addCategory,
@@ -63,6 +67,11 @@ export default function App() {
     () => calculateAccountBalances(data.accounts, data.expenses),
     [data.accounts, data.expenses]
   )
+  const categoryTotalsMap = useMemo(() => {
+    const map = {}
+    for (const c of summary.categories || []) map[c.category] = c.total
+    return map
+  }, [summary.categories])
 
   const handleOpenAddExpense = useCallback(() => {
     setExpenseForm({})
@@ -243,6 +252,7 @@ export default function App() {
             onAddIncome={handleOpenAddIncome}
             onEditIncome={handleOpenAddIncome}
             onDeleteIncome={handlePromptDeleteIncome}
+            onOpenCategoryBudgets={() => setCategoryBudgetModal(true)}
           />
         ) : null}
 
@@ -268,6 +278,7 @@ export default function App() {
             month={month}
             budget={summary.budget}
             onSaveBudget={handleSaveBudget}
+            onOpenCategoryBudgets={() => setCategoryBudgetModal(true)}
             accountEmail={isSupabaseConfigured && authUser?.id !== 'local-user' ? authUser.email : null}
             onSignOut={signOut}
             onImport={importData}
@@ -318,6 +329,20 @@ export default function App() {
           existingExpenses={data.expenses}
           onImportBatch={importBatchExpenses}
           onDismiss={() => setStatementModal(false)}
+        />
+      ) : null}
+
+      {categoryBudgetModal ? (
+        <CategoryBudgetModal
+          categories={data.categories}
+          month={month}
+          currentBudgets={data.categoryBudgets?.[month] || {}}
+          previousBudgets={data.categoryBudgets?.[prevMonth] || {}}
+          previousMonthKey={prevMonth}
+          categoryTotalsMap={categoryTotalsMap}
+          onSaveCategoryBudget={saveCategoryBudget}
+          onCopyCategoryBudgets={copyCategoryBudgets}
+          onDismiss={() => setCategoryBudgetModal(false)}
         />
       ) : null}
 

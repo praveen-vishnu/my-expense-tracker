@@ -138,6 +138,54 @@ export function useTrackerData(authReady, authUser, month) {
     }))
   }, [])
 
+  const saveCategoryBudget = useCallback((monthKey, categoryName, amount) => {
+    const val = Number(amount)
+    if (!monthKey || !categoryName) return
+    setData((current) => {
+      const monthBudgets = { ...(current.categoryBudgets?.[monthKey] || {}) }
+      if (Number.isFinite(val) && val > 0) {
+        monthBudgets[categoryName] = val
+      } else {
+        delete monthBudgets[categoryName]
+      }
+      return {
+        ...current,
+        categoryBudgets: {
+          ...(current.categoryBudgets || {}),
+          [monthKey]: monthBudgets,
+        },
+      }
+    })
+  }, [])
+
+  const deleteCategoryBudget = useCallback((monthKey, categoryName) => {
+    setData((current) => {
+      const monthBudgets = { ...(current.categoryBudgets?.[monthKey] || {}) }
+      delete monthBudgets[categoryName]
+      return {
+        ...current,
+        categoryBudgets: {
+          ...(current.categoryBudgets || {}),
+          [monthKey]: monthBudgets,
+        },
+      }
+    })
+  }, [])
+
+  const copyCategoryBudgets = useCallback((fromMonth, toMonth) => {
+    if (!fromMonth || !toMonth) return
+    setData((current) => {
+      const source = current.categoryBudgets?.[fromMonth] || {}
+      return {
+        ...current,
+        categoryBudgets: {
+          ...(current.categoryBudgets || {}),
+          [toMonth]: { ...source },
+        },
+      }
+    })
+  }, [])
+
   const addRecurringExpense = useCallback((schedule) => {
     setData((current) => ({
       ...current,
@@ -227,6 +275,9 @@ export function useTrackerData(authReady, authUser, month) {
     saveIncome,
     deleteIncome,
     saveBudget,
+    saveCategoryBudget,
+    deleteCategoryBudget,
+    copyCategoryBudgets,
     addRecurringExpense,
     deleteRecurringExpense,
     addCategory,

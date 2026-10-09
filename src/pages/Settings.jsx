@@ -13,6 +13,7 @@ export default function Settings({
   month,
   budget = 0,
   onSaveBudget,
+  onOpenCategoryBudgets,
   onAddRecurring,
   onDeleteRecurring,
   onAddAccount,
@@ -303,9 +304,21 @@ export default function Settings({
       </section>
 
       <section className="panel stack">
-        <div>
-          <h2>Monthly budget</h2>
-          <p className="muted">Set a spending limit for {formatMonthLabel(month)}.</p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+          <div>
+            <h2>Monthly budget</h2>
+            <p className="muted">Set a spending limit for {formatMonthLabel(month)}.</p>
+          </div>
+          {onOpenCategoryBudgets ? (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={onOpenCategoryBudgets}
+              style={{ fontSize: '0.85rem' }}
+            >
+              Configure Category Budgets
+            </button>
+          ) : null}
         </div>
         <form className="inline-form" noValidate onSubmit={handleBudgetSubmit}>
           <label className="field">

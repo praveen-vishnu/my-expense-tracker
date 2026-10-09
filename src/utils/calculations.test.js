@@ -140,3 +140,44 @@ test('calculateFinancialHealth evaluates savings rate, MoM delta, category drift
   assert.ok(health.insights.length >= 2)
 })
 
+test('monthSummary calculates category budget consumption, remaining, and alert statuses', () => {
+  const data = {
+    income: { '2026-10': 50000 },
+    budgets: { '2026-10': 30000 },
+    categoryBudgets: {
+      '2026-10': {
+        Food: 5000,
+        Groceries: 4000,
+        Shopping: 2000,
+      },
+    },
+    expenses: [
+      { date: '2026-10-02', category: 'Food', amount: 5500 }, // 110% -> exceeded
+      { date: '2026-10-03', category: 'Groceries', amount: 3600 }, // 90% -> warning
+      { date: '2026-10-04', category: 'Shopping', amount: 800 }, // 40% -> on-track
+    ],
+  }
+
+  const summary = monthSummary(data, '2026-10', new Date('2026-10-15T12:00:00Z'))
+
+  const food = summary.categories.find((c) => c.category === 'Food')
+  assert.equal(food.total, 5500)
+  assert.equal(food.budget, 5000)
+  assert.equal(food.remaining, -500)
+  assert.equal(food.status, 'exceeded')
+
+  const groceries = summary.categories.find((c) => c.category === 'Groceries')
+  assert.equal(groceries.total, 3600)
+  assert.equal(groceries.budget, 4000)
+  assert.equal(groceries.remaining, 400)
+  assert.equal(groceries.status, 'warning')
+
+  const shopping = summary.categories.find((c) => c.category === 'Shopping')
+  assert.equal(shopping.total, 800)
+  assert.equal(shopping.budget, 2000)
+  assert.equal(shopping.remaining, 1200)
+  assert.equal(shopping.status, 'on-track')
+
+  assert.equal(summary.categoryAlerts.length, 2) // Food (exceeded) + Groceries (warning)
+})
+

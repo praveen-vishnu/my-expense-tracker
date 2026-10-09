@@ -2848,5 +2848,253 @@ h2 {
   background: rgba(255, 255, 255, 0.04);
 }
 
+/* ==========================================================================
+   MILESTONE E: CATEGORY BUDGETS & ALERTS
+   ========================================================================== */
+
+.cat-alert-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1.15rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: var(--radius-md, 12px);
+  color: #991b1b;
+  font-size: 0.88rem;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.cat-alert-icon {
+  flex-shrink: 0;
+  color: #dc2626;
+}
+
+.cat-alert-content {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.cat-alert-content strong {
+  font-weight: 600;
+}
+
+.cat-label-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.cat-budget-pill {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  line-height: 1.2;
+}
+
+.cat-budget-on-track {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.cat-budget-warning {
+  background: #fffbeb;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.cat-budget-exceeded {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.money-budget-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+}
+
+.budget-target-sub {
+  color: var(--muted, #64748b);
+  font-size: 0.8rem;
+}
+
+.bar-fill-on-track {
+  background: linear-gradient(90deg, #10b981, #059669) !important;
+}
+
+.bar-fill-warning {
+  background: linear-gradient(90deg, #f59e0b, #d97706) !important;
+}
+
+.bar-fill-exceeded {
+  background: linear-gradient(90deg, #ef4444, #dc2626) !important;
+}
+
+/* Category Budget Modal styles */
+.cat-budget-modal-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.cat-budget-header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: var(--surface-subtle, #f8fafc);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.cat-budget-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.92rem;
+}
+
+.copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  color: var(--primary, #0f766e);
+}
+
+.cat-budget-list-container {
+  overflow-x: auto;
+  max-height: 52vh;
+}
+
+.cat-budget-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.cat-budget-table th,
+.cat-budget-table td {
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid var(--border, #e2e8f0);
+  vertical-align: middle;
+}
+
+.cat-budget-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--muted, #64748b);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: var(--surface, #ffffff);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.cat-budget-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.cat-budget-input-wrap .input-prefix {
+  position: absolute;
+  left: 0.6rem;
+  color: var(--muted, #64748b);
+  pointer-events: none;
+  font-size: 0.85rem;
+}
+
+.cat-budget-input {
+  width: 100%;
+  padding: 0.45rem 0.5rem 0.45rem 1.4rem;
+  border: 1px solid var(--border, #cbd5e1);
+  border-radius: 6px;
+  font-size: 0.88rem;
+  background: var(--bg, #ffffff);
+  color: var(--text, #1e293b);
+  font-family: inherit;
+  transition: border-color 0.15s;
+}
+
+.cat-budget-input:focus {
+  outline: none;
+  border-color: var(--primary, #0f766e);
+  box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.15);
+}
+
+.cat-budget-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border, #e2e8f0);
+}
+
+/* Dark mode for Category Budgets */
+:root[data-theme='dark'] .cat-alert-banner {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+}
+
+:root[data-theme='dark'] .cat-alert-icon {
+  color: #f87171;
+}
+
+:root[data-theme='dark'] .cat-budget-on-track {
+  background: rgba(16, 185, 129, 0.15);
+  color: #6ee7b7;
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+:root[data-theme='dark'] .cat-budget-warning {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fcd34d;
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+:root[data-theme='dark'] .cat-budget-exceeded {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+:root[data-theme='dark'] .cat-budget-header-bar {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+:root[data-theme='dark'] .cat-budget-table th {
+  background: var(--surface, #1e293b);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme='dark'] .cat-budget-table td {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme='dark'] .cat-budget-input {
+  background: rgba(0, 0, 0, 0.2);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #f1f5f9;
+}
+
+:root[data-theme='dark'] .cat-budget-actions {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+
 
 

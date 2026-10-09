@@ -16,6 +16,7 @@ export function emptyData() {
     version: DATA_VERSION,
     income: {},
     budgets: {},
+    categoryBudgets: {},
     recurringExpenses: [],
     expenses: [],
     accounts: defaultStarterAccounts(),
@@ -96,6 +97,25 @@ function normalizeBudgets(budgets) {
   return next
 }
 
+function normalizeCategoryBudgets(categoryBudgets) {
+  if (!categoryBudgets || typeof categoryBudgets !== 'object' || Array.isArray(categoryBudgets)) return {}
+  const next = {}
+  for (const [month, map] of Object.entries(categoryBudgets)) {
+    if (!isValidMonthKey(month) || !map || typeof map !== 'object') continue
+    const monthBudgets = {}
+    for (const [cat, amt] of Object.entries(map)) {
+      const val = Number(amt)
+      if (typeof cat === 'string' && cat.trim() && Number.isFinite(val) && val > 0) {
+        monthBudgets[cat.trim()] = val
+      }
+    }
+    if (Object.keys(monthBudgets).length) {
+      next[month] = monthBudgets
+    }
+  }
+  return next
+}
+
 function normalizeRecurringExpenses(recurringExpenses) {
   if (!Array.isArray(recurringExpenses)) return []
   return recurringExpenses
@@ -149,6 +169,7 @@ export function normalizeData(raw) {
     version: DATA_VERSION,
     income: normalizeIncome(raw.income),
     budgets: normalizeBudgets(raw.budgets),
+    categoryBudgets: normalizeCategoryBudgets(raw.categoryBudgets),
     recurringExpenses: normalizeRecurringExpenses(raw.recurringExpenses),
     expenses,
     accounts: normalizeAccounts(raw.accounts),
