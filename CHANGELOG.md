@@ -6,6 +6,18 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-10-09
+
+### Added
+- Multimodal AI Receipt & UPI Screenshot Scanner (`src/components/ReceiptScannerModal.jsx`):
+  - **Gemini 1.5 Flash Vision Extraction (`src/utils/geminiScanner.js`)**: Real-time extraction of transaction amounts, dates, merchant names, categories, and payment types from restaurant bills, grocery receipts, and UPI screenshots (Google Pay, PhonePe, Paytm, CRED).
+  - **Drag-and-Drop & Camera File Uploader**: Seamless image ingestion supporting drag-and-drop, direct file uploads, and mobile camera photo capture.
+  - **Automated Payment Mode Mapping**: Intelligently maps detected payment modes (UPI, Credit Card, Bank, Cash) directly to the user's corresponding account entity.
+  - **Interactive 1-Click Review & Confirmation Modal**: Inspect extracted details alongside side-by-side thumbnail previews, make quick adjustments, and confirm logging with one click.
+  - **BYOK Privacy Architecture**: Client-side Gemini API key configuration in Settings and modal with secure local storage (`localStorage`). No images or API keys are sent to third-party intermediate servers.
+  - **Unit Test Coverage**: Automated test suite for JSON markdown stripping, error handling, and prompt generation in `geminiScanner.test.js` (`15/15` tests passing).
+
+
 ## [1.12.0] - 2026-10-09
 
 ### Added

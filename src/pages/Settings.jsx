@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { parseImportedJson } from '../utils/storage.js'
 import { formatINR, formatMonthLabel, parseAmount, createId } from '../utils/formatting.js'
+import { getStoredGeminiKey, saveStoredGeminiKey } from '../utils/geminiScanner.js'
 
 export default function Settings({
   data,
@@ -42,6 +43,9 @@ export default function Settings({
   const [accType, setAccType] = useState('bank')
   const [accBalance, setAccBalance] = useState('')
   const [accLimit, setAccLimit] = useState('')
+
+  // Gemini API key state
+  const [geminiKey, setGeminiKey] = useState(() => getStoredGeminiKey())
 
   useEffect(() => {
     setBudgetInput(budget ? String(budget) : '')
@@ -143,6 +147,12 @@ export default function Settings({
     }
     onSaveBudget(value)
     reportMessage('budget', `Monthly budget set to ${formatINR(value)}.`)
+  }
+
+  function handleSaveGeminiKey(event) {
+    event.preventDefault()
+    saveStoredGeminiKey(geminiKey)
+    reportMessage('gemini', geminiKey.trim() ? 'Gemini API Key saved.' : 'Gemini API Key cleared.')
   }
 
   function handleRecurringSubmit(event) {
@@ -424,6 +434,33 @@ export default function Settings({
         </form>
         {feedback.section === 'category' && feedback.error ? <p id="category-error" className="form-error" role="alert">{feedback.error}</p> : null}
         {feedback.section === 'category' && feedback.message ? <p className="form-ok" role="status" aria-live="polite">{feedback.message}</p> : null}
+      </section>
+
+      <section className="panel stack">
+        <div>
+          <h2>AI Receipt & Bill Scanner</h2>
+          <p className="muted">Configure Google Gemini 1.5 Flash API key for instant camera/screenshot parsing.</p>
+        </div>
+        <form className="inline-form" noValidate onSubmit={handleSaveGeminiKey}>
+          <label className="field" style={{ flex: 1 }}>
+            <span>Gemini API Key</span>
+            <input
+              type="password"
+              value={geminiKey}
+              onChange={(e) => setGeminiKey(e.target.value)}
+              placeholder="Paste your Gemini API key (AIzaSy...)"
+            />
+          </label>
+          <button type="submit" className="btn btn-secondary">
+            Save Key
+          </button>
+        </form>
+        <p className="muted" style={{ fontSize: '0.82rem', margin: 0 }}>
+          Your key remains 100% private in browser local storage and is never sent to any backend servers.
+        </p>
+        {feedback.section === 'gemini' && feedback.message ? (
+          <p className="form-ok" role="status" aria-live="polite">{feedback.message}</p>
+        ) : null}
       </section>
 
       <section className="panel stack">

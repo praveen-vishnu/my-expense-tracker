@@ -13,6 +13,7 @@ export default function Dashboard({
   onEditIncome,
   onDeleteIncome,
   onOpenCategoryBudgets,
+  onScanReceipt,
 }) {
   const maxCategory = summary.categories[0]?.total || 0
   const recent = groupExpensesByDate(summary.expenses).slice(0, 5)
@@ -287,9 +288,16 @@ export default function Dashboard({
             <section className="panel recent-panel">
               <div className="panel-head">
                 <h2>Recent expenses</h2>
-                <button type="button" className="text-btn" onClick={onAddExpense}>
-                  + Add Expense
-                </button>
+                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                  {onScanReceipt ? (
+                    <button type="button" className="text-btn" onClick={onScanReceipt}>
+                      📷 Scan Bill
+                    </button>
+                  ) : null}
+                  <button type="button" className="text-btn" onClick={onAddExpense}>
+                    + Add Expense
+                  </button>
+                </div>
               </div>
               <ExpenseList
                 groups={recentItems}

@@ -5,12 +5,14 @@ import IncomeForm from './components/IncomeForm.jsx'
 import ConfirmDialog from './components/ConfirmDialog.jsx'
 import StatementImportModal from './components/StatementImportModal.jsx'
 import CategoryBudgetModal from './components/CategoryBudgetModal.jsx'
+import ReceiptScannerModal from './components/ReceiptScannerModal.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import History from './pages/History.jsx'
 import Review from './pages/Review.jsx'
 import Settings from './pages/Settings.jsx'
 import AuthForm from './components/AuthForm.jsx'
 import ThemeToggle from './components/ThemeToggle.jsx'
+import { IconCamera } from '@tabler/icons-react'
 import { monthSummary, calculateAccountBalances } from './utils/calculations.js'
 import { currentMonthKey, formatINR, relativeDateLabel, shiftMonth } from './utils/formatting.js'
 import { isSupabaseConfigured } from './utils/supabase.js'
@@ -34,6 +36,7 @@ export default function App() {
   const [incomeForm, setIncomeForm] = useState(false)
   const [statementModal, setStatementModal] = useState(false)
   const [categoryBudgetModal, setCategoryBudgetModal] = useState(false)
+  const [scanReceiptModal, setScanReceiptModal] = useState(false)
   const [confirm, setConfirm] = useState(null)
 
   const {
@@ -216,6 +219,14 @@ export default function App() {
           <button
             type="button"
             className="btn btn-secondary import-desktop-btn"
+            onClick={() => setScanReceiptModal(true)}
+            title="Scan receipt or bill with Gemini AI"
+          >
+            <IconCamera size={16} /> Scan Receipt
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary import-desktop-btn"
             onClick={() => setStatementModal(true)}
             title="Import bank statement (CSV)"
           >
@@ -253,6 +264,7 @@ export default function App() {
             onEditIncome={handleOpenAddIncome}
             onDeleteIncome={handlePromptDeleteIncome}
             onOpenCategoryBudgets={() => setCategoryBudgetModal(true)}
+            onScanReceipt={() => setScanReceiptModal(true)}
           />
         ) : null}
 
@@ -329,6 +341,20 @@ export default function App() {
           existingExpenses={data.expenses}
           onImportBatch={importBatchExpenses}
           onDismiss={() => setStatementModal(false)}
+        />
+      ) : null}
+
+      {scanReceiptModal ? (
+        <ReceiptScannerModal
+          categories={data.categories}
+          accounts={data.accounts || []}
+          onExpenseExtracted={(expense) => {
+            upsertExpense({
+              ...expense,
+              id: createId(),
+            })
+          }}
+          onDismiss={() => setScanReceiptModal(false)}
         />
       ) : null}
 
