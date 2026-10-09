@@ -6,6 +6,17 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-10-09
+
+### Added
+- Monthly Review & Financial Health Scorecard (`Review.jsx`):
+  - **Algorithmic Financial Health Score (0-100)**: Evaluates budget adherence, savings rate retention, burn rate pacing, and month-over-month trajectory into grades (A+, A, B, C, D).
+  - **Dynamic Actionable Insights**: Context-aware observations highlighting savings benchmark adherence, budget risks, and top surging or shrinking spending categories.
+  - **Month-over-Month (MoM) Comparison**: Side-by-side analysis comparing total spending, income retention, and transaction count against the previous calendar month.
+  - **Category Spending Drift & Variance Table**: Granular breakdown calculating dollar variance and percentage changes across categories vs prior month.
+  - Enhanced responsive cards, visual progress tracks, and full light/dark theme styling.
+- `calculateFinancialHealth` analytics utility in `src/utils/calculations.js` with comprehensive unit test coverage.
+
 ## [1.9.0] - 2026-10-09
 
 ### Added

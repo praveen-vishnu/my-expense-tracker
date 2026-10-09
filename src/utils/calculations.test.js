@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { categoryTotals, monthSummary, calculateAccountBalances } from './calculations.js'
+import { categoryTotals, monthSummary, calculateAccountBalances, calculateFinancialHealth } from './calculations.js'
 
 test('categoryTotals keeps top spending categories sorted by amount', () => {
   const totals = categoryTotals([
@@ -87,5 +87,56 @@ test('calculateAccountBalances computes liquid net worth and credit card outstan
   const cc = result.accounts.find((a) => a.id === 'acc_cc')
   assert.equal(cc.outstanding, 15000)
   assert.equal(cc.availableCredit, 85000)
+})
+
+test('calculateFinancialHealth evaluates savings rate, MoM delta, category drift and score', () => {
+  const current = {
+    monthKey: '2026-10',
+    income: 80000,
+    budget: 50000,
+    spent: 40000,
+    budgetRemaining: 10000,
+    burnRateStatus: 'on-track',
+    categories: [
+      { category: 'Food', total: 15000 },
+      { category: 'Rent', total: 20000 },
+      { category: 'Shopping', total: 5000 },
+    ],
+  }
+
+  const previous = {
+    monthKey: '2026-09',
+    income: 75000,
+    budget: 50000,
+    spent: 48000,
+    categories: [
+      { category: 'Food', total: 12000 },
+      { category: 'Rent', total: 20000 },
+      { category: 'Shopping', total: 16000 },
+    ],
+  }
+
+  const health = calculateFinancialHealth(current, previous)
+
+  // Savings rate: (80000 - 40000) / 80000 = 50%
+  assert.equal(health.savingsRate, 50)
+
+  // MoM spend delta: 40000 - 48000 = -8000 (-16.67%)
+  assert.equal(health.spendDelta, -8000)
+  assert.ok(health.spendDeltaPercent < 0)
+
+  // Category drift
+  const shoppingDrift = health.categoryDrift.find((c) => c.category === 'Shopping')
+  assert.equal(shoppingDrift.diff, -11000) // 5000 - 16000 = -11000
+  assert.equal(shoppingDrift.direction, 'down')
+
+  const foodDrift = health.categoryDrift.find((c) => c.category === 'Food')
+  assert.equal(foodDrift.diff, 3000) // 15000 - 12000 = +3000
+  assert.equal(foodDrift.direction, 'up')
+
+  // Score & Grade
+  assert.ok(health.score >= 80)
+  assert.ok(['A+', 'A'].includes(health.grade))
+  assert.ok(health.insights.length >= 2)
 })
 

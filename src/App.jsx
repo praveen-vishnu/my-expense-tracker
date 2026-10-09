@@ -11,7 +11,7 @@ import Settings from './pages/Settings.jsx'
 import AuthForm from './components/AuthForm.jsx'
 import ThemeToggle from './components/ThemeToggle.jsx'
 import { monthSummary, calculateAccountBalances } from './utils/calculations.js'
-import { currentMonthKey, formatINR, relativeDateLabel } from './utils/formatting.js'
+import { currentMonthKey, formatINR, relativeDateLabel, shiftMonth } from './utils/formatting.js'
 import { isSupabaseConfigured } from './utils/supabase.js'
 import { useTheme } from './hooks/useTheme.js'
 import { useAuth } from './hooks/useAuth.js'
@@ -55,6 +55,8 @@ export default function App() {
   } = useTrackerData(authReady, authUser, month)
 
   const summary = useMemo(() => monthSummary(data, month), [data, month])
+  const prevMonth = useMemo(() => shiftMonth(month, -1), [month])
+  const previousSummary = useMemo(() => monthSummary(data, prevMonth), [data, prevMonth])
   const accountBalances = useMemo(
     () => calculateAccountBalances(data.accounts, data.expenses),
     [data.accounts, data.expenses]
@@ -251,7 +253,9 @@ export default function App() {
           />
         ) : null}
 
-        {page === 'review' ? <Review summary={summary} /> : null}
+        {page === 'review' ? (
+          <Review summary={summary} previousSummary={previousSummary} month={month} />
+        ) : null}
 
         {page === 'settings' ? (
           <Settings

@@ -1,4 +1,4 @@
-import { daysInMonth, monthKeyFromDate } from './formatting.js'
+import { daysInMonth, monthKeyFromDate, formatINR } from './formatting.js'
 
 export function expensesForMonth(expenses, monthKey) {
   return expenses.filter((expense) => monthKeyFromDate(expense.date) === monthKey)
@@ -176,5 +176,186 @@ export function calculateAccountBalances(accounts = [], expenses = []) {
     totalCreditOutstanding,
     netWorth,
     unassignedSpent,
+  }
+}
+
+export function calculateFinancialHealth(currentSummary, previousSummary = null) {
+  const income = currentSummary?.income || 0
+  const spent = currentSummary?.spent || 0
+  const budget = currentSummary?.budget || 0
+  const remaining = income - spent
+  const savingsRate = income > 0 ? ((income - spent) / income) * 100 : null
+
+  // 1. Month-over-Month (MoM) Spend Delta
+  const prevSpent = previousSummary?.spent || 0
+  const spendDelta = previousSummary ? spent - prevSpent : null
+  const spendDeltaPercent = previousSummary && prevSpent > 0
+    ? ((spent - prevSpent) / prevSpent) * 100
+    : null
+
+  // 2. Category Drift Analysis
+  const currentCategories = new Map((currentSummary?.categories || []).map((c) => [c.category, c.total]))
+  const previousCategories = new Map((previousSummary?.categories || []).map((c) => [c.category, c.total]))
+  const allCategoryNames = new Set([...currentCategories.keys(), ...previousCategories.keys()])
+
+  const categoryDrift = []
+  for (const name of allCategoryNames) {
+    const curVal = currentCategories.get(name) || 0
+    const prevVal = previousCategories.get(name) || 0
+    const diff = curVal - prevVal
+    const diffPercent = prevVal > 0 ? (diff / prevVal) * 100 : null
+    let direction = 'same'
+    if (diff > 0) direction = 'up'
+    else if (diff < 0) direction = 'down'
+
+    categoryDrift.push({
+      category: name,
+      current: curVal,
+      previous: prevVal,
+      diff,
+      diffPercent,
+      direction,
+    })
+  }
+
+  // Sort by highest absolute dollar change
+  categoryDrift.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff))
+
+  // 3. Algorithmic Financial Health Score (0 - 100)
+  // Component A: Budget Adherence (up to 40 pts)
+  let budgetScore = 30
+  if (budget > 0) {
+    const ratio = spent / budget
+    if (ratio <= 0.8) budgetScore = 40
+    else if (ratio <= 1.0) budgetScore = 35
+    else if (ratio <= 1.1) budgetScore = 20
+    else if (ratio <= 1.25) budgetScore = 10
+    else budgetScore = 0
+  } else if (income > 0) {
+    budgetScore = spent <= income ? 32 : 10
+  }
+
+  // Component B: Savings Rate (up to 35 pts)
+  let savingsScore = 20
+  if (savingsRate != null) {
+    if (savingsRate >= 30) savingsScore = 35
+    else if (savingsRate >= 20) savingsScore = 28
+    else if (savingsRate >= 10) savingsScore = 20
+    else if (savingsRate > 0) savingsScore = 12
+    else savingsScore = 0
+  }
+
+  // Component C: Pacing & Burn Rate (up to 15 pts)
+  let paceScore = 15
+  if (currentSummary?.burnRateStatus === 'warning') paceScore = 8
+  else if (currentSummary?.burnRateStatus === 'exceeded') paceScore = 2
+
+  // Component D: Trajectory / MoM (up to 10 pts)
+  let trajectoryScore = 8
+  if (spendDeltaPercent != null) {
+    if (spendDeltaPercent <= 0) trajectoryScore = 10
+    else if (spendDeltaPercent <= 15) trajectoryScore = 6
+    else trajectoryScore = 2
+  }
+
+  const score = Math.min(Math.max(budgetScore + savingsScore + paceScore + trajectoryScore, 0), 100)
+
+  let grade = 'B'
+  let gradeLabel = 'Stable'
+  let gradeColor = 'blue'
+
+  if (score >= 90) {
+    grade = 'A+'
+    gradeLabel = 'Exceptional'
+    gradeColor = 'emerald'
+  } else if (score >= 80) {
+    grade = 'A'
+    gradeLabel = 'Healthy'
+    gradeColor = 'green'
+  } else if (score >= 70) {
+    grade = 'B'
+    gradeLabel = 'Stable'
+    gradeColor = 'blue'
+  } else if (score >= 60) {
+    grade = 'C'
+    gradeLabel = 'Fair'
+    gradeColor = 'amber'
+  } else {
+    grade = 'D'
+    gradeLabel = 'At Risk'
+    gradeColor = 'rose'
+  }
+
+  // 4. Dynamic Actionable Insights
+  const insights = []
+
+  if (savingsRate != null) {
+    if (savingsRate >= 20) {
+      insights.push({
+        type: 'positive',
+        text: `Strong savings rate of ${Math.round(savingsRate)}% (${formatINR(remaining)} retained), well above the 20% benchmark.`,
+      })
+    } else if (savingsRate > 0) {
+      insights.push({
+        type: 'neutral',
+        text: `Positive cashflow with ${Math.round(savingsRate)}% saved (${formatINR(remaining)}). Aim for 20% to build your emergency buffer.`,
+      })
+    } else {
+      insights.push({
+        type: 'negative',
+        text: `Spending exceeded monthly income by ${formatINR(Math.abs(remaining))}. Look for immediate expenses to trim.`,
+      })
+    }
+  }
+
+  if (budget > 0) {
+    if (spent > budget) {
+      insights.push({
+        type: 'negative',
+        text: `You have breached your monthly budget by ${formatINR(spent - budget)}.`,
+      })
+    } else if (currentSummary?.burnRateStatus === 'warning') {
+      insights.push({
+        type: 'warning',
+        text: `Spending burn rate is pacing above budget. Safe daily spend is ${formatINR(currentSummary?.safeDailySpend)}/day.`,
+      })
+    } else {
+      insights.push({
+        type: 'positive',
+        text: `On track! You have ${formatINR(currentSummary?.budgetRemaining)} buffer left within budget.`,
+      })
+    }
+  }
+
+  // Check biggest category increase
+  const biggestIncrease = categoryDrift.find((c) => c.direction === 'up' && c.diff > 0)
+  if (biggestIncrease && previousSummary && prevSpent > 0) {
+    const pct = biggestIncrease.diffPercent != null ? ` (+${Math.round(biggestIncrease.diffPercent)}%)` : ''
+    insights.push({
+      type: 'warning',
+      text: `${biggestIncrease.category} spending grew by ${formatINR(biggestIncrease.diff)}${pct} compared to last month.`,
+    })
+  }
+
+  // Check biggest category reduction
+  const biggestSaving = categoryDrift.find((c) => c.direction === 'down' && c.diff < 0)
+  if (biggestSaving && previousSummary && prevSpent > 0) {
+    const pct = biggestSaving.diffPercent != null ? ` (${Math.round(biggestSaving.diffPercent)}%)` : ''
+    insights.push({
+      type: 'positive',
+      text: `Saved ${formatINR(Math.abs(biggestSaving.diff))}${pct} in ${biggestSaving.category} compared to last month.`,
+    })
+  }
+
+  return {
+    score,
+    grade,
+    gradeLabel,
+    gradeColor,
+    savingsRate,
+    spendDelta,
+    spendDeltaPercent,
+    categoryDrift,
+    insights,
   }
 }
