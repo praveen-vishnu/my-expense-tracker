@@ -136,6 +136,48 @@ export function useTrackerData(authReady, authUser, month) {
     })
   }, [])
 
+  const addAccount = useCallback((account) => {
+    setData((current) => ({
+      ...current,
+      accounts: [...(current.accounts || []), account],
+    }))
+  }, [])
+
+  const updateAccount = useCallback((accountId, fields) => {
+    setData((current) => ({
+      ...current,
+      accounts: (current.accounts || []).map((acc) =>
+        acc.id === accountId ? { ...acc, ...fields } : acc
+      ),
+    }))
+  }, [])
+
+  const deleteAccount = useCallback((accountId) => {
+    setData((current) => {
+      const remaining = (current.accounts || []).filter((acc) => acc.id !== accountId)
+      if (remaining.length && !remaining.some((a) => a.isDefault)) {
+        remaining[0].isDefault = true
+      }
+      return {
+        ...current,
+        accounts: remaining,
+        expenses: current.expenses.map((e) =>
+          e.accountId === accountId ? { ...e, accountId: null } : e
+        ),
+      }
+    })
+  }, [])
+
+  const setDefaultAccount = useCallback((accountId) => {
+    setData((current) => ({
+      ...current,
+      accounts: (current.accounts || []).map((acc) => ({
+        ...acc,
+        isDefault: acc.id === accountId,
+      })),
+    }))
+  }, [])
+
   const importData = useCallback((imported) => {
     setData(normalizeData(imported))
   }, [])
@@ -157,6 +199,10 @@ export function useTrackerData(authReady, authUser, month) {
     addRecurringExpense,
     deleteRecurringExpense,
     addCategory,
+    addAccount,
+    updateAccount,
+    deleteAccount,
+    setDefaultAccount,
     importData,
     clearAllData,
   }

@@ -1,10 +1,12 @@
 import { formatINR, relativeDateLabel } from '../utils/formatting.js'
 import { IconTrash } from '@tabler/icons-react'
 
-export default function ExpenseList({ groups, onEdit, onDelete, emptyMessage }) {
+export default function ExpenseList({ groups, accounts = [], onEdit, onDelete, emptyMessage }) {
   if (!groups.length) {
     return <p className="empty-inline">{emptyMessage}</p>
   }
+
+  const accountMap = new Map((accounts || []).map((a) => [a.id, a.name]))
 
   return (
     <div className="expense-groups">
@@ -26,6 +28,9 @@ export default function ExpenseList({ groups, onEdit, onDelete, emptyMessage }) 
                   <span className="expense-meta">
                     <strong>{expense.category}</strong>
                     {expense.note ? <span>{expense.note}</span> : null}
+                    {expense.accountId && accountMap.has(expense.accountId) ? (
+                      <span className="expense-acc-pill">{accountMap.get(expense.accountId)}</span>
+                    ) : null}
                   </span>
                   <span className="money">{formatINR(expense.amount)}</span>
                 </button>

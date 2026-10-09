@@ -9,7 +9,7 @@ import Review from './pages/Review.jsx'
 import Settings from './pages/Settings.jsx'
 import AuthForm from './components/AuthForm.jsx'
 import ThemeToggle from './components/ThemeToggle.jsx'
-import { monthSummary } from './utils/calculations.js'
+import { monthSummary, calculateAccountBalances } from './utils/calculations.js'
 import { currentMonthKey, formatINR, relativeDateLabel } from './utils/formatting.js'
 import { isSupabaseConfigured } from './utils/supabase.js'
 import { useTheme } from './hooks/useTheme.js'
@@ -44,11 +44,18 @@ export default function App() {
     addRecurringExpense,
     deleteRecurringExpense,
     addCategory,
+    addAccount,
+    deleteAccount,
+    setDefaultAccount,
     importData,
     clearAllData,
   } = useTrackerData(authReady, authUser, month)
 
   const summary = useMemo(() => monthSummary(data, month), [data, month])
+  const accountBalances = useMemo(
+    () => calculateAccountBalances(data.accounts, data.expenses),
+    [data.accounts, data.expenses]
+  )
 
   const handleOpenAddExpense = useCallback(() => {
     setExpenseForm({})
@@ -97,6 +104,18 @@ export default function App() {
       },
     })
   }, [deleteRecurringExpense])
+
+  const handlePromptDeleteAccount = useCallback((account) => {
+    setConfirm({
+      title: 'Delete account?',
+      message: `Delete ${account.name}? Past expenses associated with this account will remain as unassigned.`,
+      confirmLabel: 'Delete account',
+      onConfirm: () => {
+        deleteAccount(account.id)
+        setConfirm(null)
+      },
+    })
+  }, [deleteAccount])
 
   const handlePromptClearAll = useCallback(() => {
     setConfirm({
@@ -202,6 +221,7 @@ export default function App() {
         {page === 'dashboard' ? (
           <Dashboard
             summary={summary}
+            accountBalances={accountBalances}
             onAddExpense={handleOpenAddExpense}
             onEditExpense={handleOpenEditExpense}
             onDeleteExpense={handlePromptDeleteExpense}
@@ -235,6 +255,9 @@ export default function App() {
             onAddCategory={addCategory}
             onAddRecurring={addRecurringExpense}
             onDeleteRecurring={handlePromptDeleteRecurring}
+            onAddAccount={addAccount}
+            onDeleteAccount={handlePromptDeleteAccount}
+            onSetDefaultAccount={setDefaultAccount}
           />
         ) : null}
       </main>
@@ -251,6 +274,7 @@ export default function App() {
               ? [expenseForm.expense.category, ...data.categories]
               : data.categories
           }
+          accounts={data.accounts || []}
           initial={expenseForm.expense}
           onCancel={() => setExpenseForm(null)}
           onSave={handleSaveExpense}

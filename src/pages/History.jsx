@@ -128,6 +128,7 @@ export default function History({
       <section className="panel">
         <ExpenseList
           groups={groups}
+          accounts={data.accounts || []}
           onEdit={onEditExpense}
           onDelete={onDeleteExpense}
           emptyMessage={

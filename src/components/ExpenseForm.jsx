@@ -4,6 +4,7 @@ import ModalSheet from './ModalSheet.jsx'
 
 export default function ExpenseForm({
   categories,
+  accounts = [],
   initial,
   onSave,
   onCancel,
@@ -12,6 +13,10 @@ export default function ExpenseForm({
   const [category, setCategory] = useState(initial?.category || categories[0] || '')
   const [date, setDate] = useState(initial?.date || todayISO())
   const [note, setNote] = useState(initial?.note || '')
+
+  const defaultAccId = accounts.find((a) => a.isDefault)?.id || accounts[0]?.id || ''
+  const [accountId, setAccountId] = useState(initial?.accountId || defaultAccId)
+
   const [error, setError] = useState(null)
   const amountRef = useRef(null)
   const categoryRef = useRef(null)
@@ -41,6 +46,7 @@ export default function ExpenseForm({
       category,
       date,
       note: note.trim(),
+      accountId: accountId || null,
     })
   }
 
@@ -73,6 +79,22 @@ export default function ExpenseForm({
             />
           </div>
         </label>
+
+        {accounts.length > 0 ? (
+          <label className="field">
+            <span>Account / Payment method</span>
+            <select
+              value={accountId}
+              onChange={(event) => setAccountId(event.target.value)}
+            >
+              {accounts.map((acc) => (
+                <option key={acc.id} value={acc.id}>
+                  {acc.name} ({acc.type === 'credit_card' ? 'Credit Card' : acc.type === 'bank' ? 'Bank' : acc.type === 'wallet' ? 'Wallet' : 'Cash'})
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
 
         <label className="field">
           <span>Category</span>

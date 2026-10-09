@@ -125,3 +125,56 @@ export function monthSummary(data, monthKey, now = new Date()) {
     categories: categoryTotals(monthExpenses),
   }
 }
+
+export function calculateAccountBalances(accounts = [], expenses = []) {
+  const spentByAccount = new Map()
+  let unassignedSpent = 0
+
+  for (const exp of expenses) {
+    if (exp.accountId) {
+      spentByAccount.set(exp.accountId, (spentByAccount.get(exp.accountId) || 0) + exp.amount)
+    } else {
+      unassignedSpent += exp.amount
+    }
+  }
+
+  let totalLiquid = 0
+  let totalCreditOutstanding = 0
+
+  const processed = accounts.map((acc) => {
+    const totalSpent = spentByAccount.get(acc.id) || 0
+    let currentBalance = 0
+    let outstanding = 0
+    let availableCredit = null
+
+    if (acc.type === 'credit_card') {
+      outstanding = totalSpent
+      currentBalance = -outstanding
+      totalCreditOutstanding += outstanding
+      if (acc.creditLimit != null) {
+        availableCredit = Math.max(acc.creditLimit - outstanding, 0)
+      }
+    } else {
+      currentBalance = acc.initialBalance - totalSpent
+      totalLiquid += currentBalance
+    }
+
+    return {
+      ...acc,
+      totalSpent,
+      currentBalance,
+      outstanding,
+      availableCredit,
+    }
+  })
+
+  const netWorth = totalLiquid - totalCreditOutstanding
+
+  return {
+    accounts: processed,
+    totalLiquid,
+    totalCreditOutstanding,
+    netWorth,
+    unassignedSpent,
+  }
+}

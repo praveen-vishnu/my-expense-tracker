@@ -4,6 +4,7 @@ import ExpenseList from '../components/ExpenseList.jsx'
 
 export default function Dashboard({
   summary,
+  accountBalances,
   onAddExpense,
   onEditExpense,
   onDeleteExpense,
@@ -187,6 +188,50 @@ export default function Dashboard({
         </div>
 
         <div className="dashboard-side-col">
+          {/* ACCOUNTS OVERVIEW WIDGET */}
+          {accountBalances && accountBalances.accounts.length > 0 ? (
+            <section className="panel accounts-panel">
+              <div className="panel-head">
+                <div>
+                  <h2>Accounts & Liquidity</h2>
+                  <p className="muted">Net liquid worth across accounts</p>
+                </div>
+                <span className="net-worth-badge">
+                  Net: <strong className={`money ${accountBalances.netWorth < 0 ? 'negative' : 'positive'}`}>{formatINR(accountBalances.netWorth)}</strong>
+                </span>
+              </div>
+
+              <div className="accounts-list">
+                {accountBalances.accounts.map((acc) => (
+                  <div key={acc.id} className={`account-chip acc-${acc.type}`}>
+                    <div className="acc-info">
+                      <span className="acc-type-icon">
+                        {acc.type === 'credit_card' ? '💳' : acc.type === 'bank' ? '🏦' : acc.type === 'wallet' ? '📱' : '💵'}
+                      </span>
+                      <div>
+                        <strong>{acc.name}</strong>
+                        <small>{acc.type === 'credit_card' ? 'Credit Card' : acc.type === 'bank' ? 'Bank Account' : acc.type === 'wallet' ? 'Wallet' : 'Cash'}</small>
+                      </div>
+                    </div>
+                    <div className="acc-balance">
+                      {acc.type === 'credit_card' ? (
+                        <>
+                          <strong className={acc.outstanding > 0 ? 'money spent' : 'money'}>{formatINR(acc.outstanding)}</strong>
+                          <small>outstanding{acc.availableCredit != null ? ` · ${formatINR(acc.availableCredit)} limit left` : ''}</small>
+                        </>
+                      ) : (
+                        <>
+                          <strong className={`money ${acc.currentBalance < 0 ? 'negative' : ''}`}>{formatINR(acc.currentBalance)}</strong>
+                          <small>available</small>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
           {summary.expenses.length > 0 ? (
             <section className="panel recent-panel">
               <div className="panel-head">
@@ -197,6 +242,7 @@ export default function Dashboard({
               </div>
               <ExpenseList
                 groups={recentItems}
+                accounts={accountBalances?.accounts || []}
                 onEdit={onEditExpense}
                 onDelete={onDeleteExpense}
                 emptyMessage="No expenses yet."

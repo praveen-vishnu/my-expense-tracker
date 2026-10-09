@@ -4,6 +4,13 @@ import { isSupabaseConfigured, supabase } from './supabase.js'
 export const STORAGE_KEY = 'expenseTracker'
 export const DATA_VERSION = 1
 
+export function defaultStarterAccounts() {
+  return [
+    { id: 'acc_bank', name: 'Primary Bank', type: 'bank', initialBalance: 0, isDefault: true },
+    { id: 'acc_cash', name: 'Cash', type: 'cash', initialBalance: 0, isDefault: false },
+  ]
+}
+
 export function emptyData() {
   return {
     version: DATA_VERSION,
@@ -11,8 +18,36 @@ export function emptyData() {
     budgets: {},
     recurringExpenses: [],
     expenses: [],
+    accounts: defaultStarterAccounts(),
     categories: [],
   }
+}
+
+function normalizeAccounts(accounts) {
+  if (!Array.isArray(accounts) || !accounts.length) {
+    return defaultStarterAccounts()
+  }
+  const validTypes = new Set(['bank', 'credit_card', 'cash', 'wallet'])
+  const cleaned = accounts
+    .filter((a) => a && typeof a.id === 'string' && a.id && typeof a.name === 'string' && a.name.trim())
+    .map((a) => ({
+      id: a.id,
+      name: a.name.trim(),
+      type: validTypes.has(a.type) ? a.type : 'bank',
+      initialBalance: Number.isFinite(Number(a.initialBalance)) ? Number(a.initialBalance) : 0,
+      creditLimit: a.type === 'credit_card' && Number.isFinite(Number(a.creditLimit)) ? Number(a.creditLimit) : null,
+      isDefault: Boolean(a.isDefault),
+    }))
+
+  if (!cleaned.length) {
+    return defaultStarterAccounts()
+  }
+
+  if (!cleaned.some((a) => a.isDefault)) {
+    cleaned[0].isDefault = true
+  }
+
+  return cleaned
 }
 
 function isValidExpense(expense) {
@@ -105,6 +140,7 @@ export function normalizeData(raw) {
         category: expense.category.trim(),
         date: expense.date,
         note: expense.note ? String(expense.note) : '',
+        ...(typeof expense.accountId === 'string' ? { accountId: expense.accountId } : {}),
         ...(typeof expense.recurringId === 'string' ? { recurringId: expense.recurringId } : {}),
       }))
     : []
@@ -115,6 +151,7 @@ export function normalizeData(raw) {
     budgets: normalizeBudgets(raw.budgets),
     recurringExpenses: normalizeRecurringExpenses(raw.recurringExpenses),
     expenses,
+    accounts: normalizeAccounts(raw.accounts),
     categories: normalizeCategories(raw.categories),
   }
 }

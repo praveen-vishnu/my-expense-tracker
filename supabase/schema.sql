@@ -55,10 +55,36 @@ create trigger on_auth_user_created_seed_expense_categories
   after insert on auth.users
   for each row execute procedure public.seed_expense_categories();
 
--- 2. Normalized Expenses Table
+-- 2. Accounts Table
+create table if not exists public.accounts (
+  id text primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null check (char_length(trim(name)) > 0),
+  type text not null check (type in ('bank', 'credit_card', 'cash', 'wallet')),
+  initial_balance numeric(12, 2) not null default 0,
+  credit_limit numeric(12, 2) default null,
+  color text default null,
+  is_default boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_accounts_user on public.accounts(user_id);
+
+alter table public.accounts enable row level security;
+
+drop policy if exists "Users can manage own accounts" on public.accounts;
+create policy "Users can manage own accounts"
+  on public.accounts for all to authenticated
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+grant select, insert, update, delete on public.accounts to authenticated;
+
+-- 3. Normalized Expenses Table
 create table if not exists public.expenses (
   id text primary key,
   user_id uuid not null references auth.users(id) on delete cascade,
+  account_id text default null references public.accounts(id) on delete set null,
   amount numeric(12, 2) not null check (amount > 0),
   category text not null,
   date date not null,
@@ -70,6 +96,7 @@ create table if not exists public.expenses (
 
 create index if not exists idx_expenses_user_date on public.expenses(user_id, date desc);
 create index if not exists idx_expenses_user_category on public.expenses(user_id, category);
+create index if not exists idx_expenses_user_account on public.expenses(user_id, account_id);
 
 alter table public.expenses enable row level security;
 

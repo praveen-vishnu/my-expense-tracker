@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { parseImportedJson } from '../utils/storage.js'
-import { formatINR, formatMonthLabel, parseAmount } from '../utils/formatting.js'
-import { createId } from '../utils/formatting.js'
+import { formatINR, formatMonthLabel, parseAmount, createId } from '../utils/formatting.js'
 
 export default function Settings({
   data,
@@ -15,20 +14,32 @@ export default function Settings({
   onSaveBudget,
   onAddRecurring,
   onDeleteRecurring,
+  onAddAccount,
+  onDeleteAccount,
+  onSetDefaultAccount,
 }) {
   const fileRef = useRef(null)
   const budgetInputRef = useRef(null)
   const categoryInputRef = useRef(null)
+  const accountInputRef = useRef(null)
   const scheduleFields = useRef({})
+
   const [categoryName, setCategoryName] = useState('')
   const [feedback, setFeedback] = useState({ section: '', error: '', message: '', field: '' })
   const [budgetInput, setBudgetInput] = useState(budget ? String(budget) : '')
+
   const [scheduleName, setScheduleName] = useState('')
   const [scheduleAmount, setScheduleAmount] = useState('')
   const [scheduleCategory, setScheduleCategory] = useState(data.categories[0] || '')
   const [scheduleDay, setScheduleDay] = useState('1')
   const [scheduleKind, setScheduleKind] = useState('monthly')
   const [scheduleInstallments, setScheduleInstallments] = useState('')
+
+  // Account form state
+  const [accName, setAccName] = useState('')
+  const [accType, setAccType] = useState('bank')
+  const [accBalance, setAccBalance] = useState('')
+  const [accLimit, setAccLimit] = useState('')
 
   useEffect(() => {
     setBudgetInput(budget ? String(budget) : '')
@@ -38,11 +49,12 @@ export default function Settings({
     setFeedback({ section, error, message: '', field })
     if (section === 'budget') budgetInputRef.current?.focus()
     if (section === 'category') categoryInputRef.current?.focus()
+    if (section === 'account') accountInputRef.current?.focus()
     if (section === 'schedule') scheduleFields.current[field]?.focus()
   }
 
   function reportMessage(section, message) {
-    setFeedback({ section, error: '', message, field: '' })
+    setFeedback({ section, error, message, field: '' })
   }
 
   function exportData() {
@@ -88,6 +100,36 @@ export default function Settings({
     onAddCategory(name)
     setCategoryName('')
     reportMessage('category', `Added ${name}.`)
+  }
+
+  function handleAddAccountSubmit(event) {
+    event.preventDefault()
+    const name = accName.trim()
+    if (!name) {
+      reportError('account', 'Enter an account name.', 'name')
+      return
+    }
+    if ((data.accounts || []).some((a) => a.name.toLowerCase() === name.toLowerCase())) {
+      reportError('account', 'An account with that name already exists.', 'name')
+      return
+    }
+
+    const initialBalance = parseAmount(accBalance) || 0
+    const creditLimit = accType === 'credit_card' ? parseAmount(accLimit) || null : null
+
+    onAddAccount({
+      id: createId(),
+      name,
+      type: accType,
+      initialBalance,
+      creditLimit,
+      isDefault: !(data.accounts || []).length,
+    })
+
+    setAccName('')
+    setAccBalance('')
+    setAccLimit('')
+    reportMessage('account', `Added account: ${name}.`)
   }
 
   function handleBudgetSubmit(event) {
@@ -147,7 +189,7 @@ export default function Settings({
     <div className="page">
       <header className="page-intro">
         <h1>Settings</h1>
-        <p>Your data stays in this browser. Export a backup if you switch devices.</p>
+        <p>Your financial accounts, preferences, and data synchronization.</p>
       </header>
 
       {accountEmail ? (
@@ -161,6 +203,103 @@ export default function Settings({
           </button>
         </section>
       ) : null}
+
+      {/* ACCOUNTS & PAYMENT METHODS SECTION */}
+      <section className="panel stack">
+        <div>
+          <h2>Accounts & Payment Methods</h2>
+          <p className="muted">Manage your bank accounts, credit cards, and cash wallets.</p>
+        </div>
+
+        {data.accounts && data.accounts.length ? (
+          <ul className="account-settings-list">
+            {data.accounts.map((acc) => (
+              <li key={acc.id} className="account-settings-item">
+                <div className="acc-meta">
+                  <span className="acc-badge">
+                    {acc.type === 'credit_card' ? 'Credit Card' : acc.type === 'bank' ? 'Bank' : acc.type === 'wallet' ? 'Wallet' : 'Cash'}
+                  </span>
+                  <strong>{acc.name}</strong>
+                  {acc.isDefault ? <span className="default-pill">Default</span> : null}
+                  <small className="muted">
+                    {acc.type === 'credit_card'
+                      ? acc.creditLimit ? `Limit: ${formatINR(acc.creditLimit)}` : 'No credit limit set'
+                      : `Starting: ${formatINR(acc.initialBalance)}`}
+                  </small>
+                </div>
+
+                <div className="account-actions">
+                  {!acc.isDefault ? (
+                    <button
+                      type="button"
+                      className="text-btn"
+                      onClick={() => onSetDefaultAccount(acc.id)}
+                    >
+                      Make default
+                    </button>
+                  ) : null}
+                  {data.accounts.length > 1 ? (
+                    <button
+                      type="button"
+                      className="text-btn danger"
+                      onClick={() => onDeleteAccount(acc)}
+                    >
+                      Delete
+                    </button>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        <form className="recurring-form" noValidate onSubmit={handleAddAccountSubmit}>
+          <label className="field">
+            <span>Account name</span>
+            <input
+              ref={accountInputRef}
+              value={accName}
+              required
+              aria-invalid={feedback.section === 'account' && feedback.field === 'name'}
+              aria-describedby={feedback.section === 'account' && feedback.field === 'name' ? 'account-error' : undefined}
+              onChange={(event) => setAccName(event.target.value)}
+              placeholder="HDFC Salary"
+            />
+          </label>
+
+          <label className="field">
+            <span>Type</span>
+            <select value={accType} onChange={(event) => setAccType(event.target.value)}>
+              <option value="bank">Bank Account</option>
+              <option value="credit_card">Credit Card</option>
+              <option value="cash">Cash in Hand</option>
+              <option value="wallet">Digital Wallet</option>
+            </select>
+          </label>
+
+          <label className="field">
+            <span>{accType === 'credit_card' ? 'Credit limit (optional)' : 'Starting balance'}</span>
+            <div className="amount-input">
+              <span>₹</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={accType === 'credit_card' ? accLimit : accBalance}
+                onChange={(event) =>
+                  accType === 'credit_card' ? setAccLimit(event.target.value) : setAccBalance(event.target.value)
+                }
+                placeholder={accType === 'credit_card' ? '150000' : '25000'}
+              />
+            </div>
+          </label>
+
+          <button type="submit" className="btn btn-secondary">
+            Add account
+          </button>
+        </form>
+        {feedback.section === 'account' && feedback.error ? <p id="account-error" className="form-error" role="alert">{feedback.error}</p> : null}
+        {feedback.section === 'account' && feedback.message ? <p className="form-ok" role="status" aria-live="polite">{feedback.message}</p> : null}
+      </section>
 
       <section className="panel stack">
         <div>
@@ -246,30 +385,6 @@ export default function Settings({
       </section>
 
       <section className="panel stack">
-        <h2>Data</h2>
-        <div className="button-row">
-          <button type="button" className="btn btn-secondary" onClick={exportData}>
-            Export Data
-          </button>
-          <button type="button" className="btn btn-secondary" onClick={() => fileRef.current?.click()}>
-            Import Data
-          </button>
-          <button type="button" className="btn btn-danger" onClick={onClear}>
-            Clear All Data
-          </button>
-        </div>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="application/json,.json"
-          hidden
-          onChange={handleFile}
-        />
-        {feedback.section === 'data' && feedback.message ? <p className="form-ok" role="status" aria-live="polite">{feedback.message}</p> : null}
-        {feedback.section === 'data' && feedback.error ? <p className="form-error" role="alert">{feedback.error}</p> : null}
-      </section>
-
-      <section className="panel stack">
         <h2>Categories</h2>
         <ul className="chip-list">
           {data.categories.map((name) => (
@@ -297,6 +412,29 @@ export default function Settings({
         {feedback.section === 'category' && feedback.message ? <p className="form-ok" role="status" aria-live="polite">{feedback.message}</p> : null}
       </section>
 
+      <section className="panel stack">
+        <h2>Data</h2>
+        <div className="button-row">
+          <button type="button" className="btn btn-secondary" onClick={exportData}>
+            Export Data
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={() => fileRef.current?.click()}>
+            Import Data
+          </button>
+          <button type="button" className="btn btn-danger" onClick={onClear}>
+            Clear All Data
+          </button>
+        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/json,.json"
+          hidden
+          onChange={handleFile}
+        />
+        {feedback.section === 'data' && feedback.message ? <p className="form-ok" role="status" aria-live="polite">{feedback.message}</p> : null}
+        {feedback.section === 'data' && feedback.error ? <p className="form-error" role="alert">{feedback.error}</p> : null}
+      </section>
     </div>
   )
 }

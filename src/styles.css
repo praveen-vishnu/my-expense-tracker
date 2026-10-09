@@ -642,6 +642,150 @@ h2 {
   gap: 1.25rem;
 }
 
+/* ACCOUNTS WIDGET & LIST */
+.accounts-panel .panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.net-worth-badge {
+  font-size: 0.85rem;
+  color: var(--muted);
+  background: rgba(24, 111, 98, 0.08);
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid rgba(24, 111, 98, 0.16);
+}
+
+.accounts-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.account-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 0.9rem;
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(122, 127, 123, 0.16);
+  border-radius: 14px;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.account-chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgb(31 42 39 / 0.05);
+}
+
+.acc-info {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.acc-type-icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.acc-info strong {
+  display: block;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.acc-info small {
+  display: block;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.acc-balance {
+  text-align: right;
+}
+
+.acc-balance strong {
+  display: block;
+  font-size: 0.98rem;
+}
+
+.acc-balance small {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+/* SETTINGS ACCOUNTS LIST */
+.account-settings-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.account-settings-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+}
+
+.acc-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.acc-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.45rem;
+  background: rgba(122, 127, 123, 0.12);
+  border-radius: 6px;
+  color: var(--muted);
+}
+
+.default-pill {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(24, 111, 98, 0.15);
+  color: var(--pine);
+}
+
+.account-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.expense-acc-pill {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 500;
+  padding: 0.1rem 0.45rem;
+  border-radius: 4px;
+  background: rgba(122, 127, 123, 0.12);
+  color: var(--muted);
+  margin-top: 0.2rem;
+  width: fit-content;
+}
+
 .money {
   font-family: var(--mono);
   font-weight: 600;
@@ -1546,6 +1690,27 @@ h2 {
 :root[data-theme='dark'] .filter-summary-bar {
   background: rgba(33, 44, 39, 0.85);
   border-color: var(--line);
+}
+
+:root[data-theme='dark'] .net-worth-badge {
+  background: rgba(130, 201, 174, 0.12);
+  border-color: rgba(130, 201, 174, 0.25);
+  color: var(--pine-ink);
+}
+
+:root[data-theme='dark'] .account-chip {
+  background: rgba(0, 0, 0, 0.25);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme='dark'] .account-settings-item {
+  background: #202a26;
+  border-color: var(--line);
+}
+
+:root[data-theme='dark'] .default-pill {
+  background: rgba(130, 201, 174, 0.2);
+  color: #a2d8bd;
 }
 
 :root[data-theme='dark'] .budget-track,

@@ -6,6 +6,16 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-10-09
+
+### Added
+- Multi-Account & Payment Method Engine: support for Bank Accounts, Credit Cards, Cash, and Digital Wallets.
+- Accounts & Liquidity Overview panel on Dashboard tracking Total Net Liquid Worth vs Credit Card Outstandings.
+- Account / Payment Method selector in ExpenseForm for tagging expenses to specific accounts.
+- Account tags on transaction rows in ExpenseList.
+- Full Account management in Settings (adding accounts, starting balances, credit limits, setting default account).
+- Idempotent migration script `supabase/migration_v3_accounts.sql` for adding accounts and linking to expenses.
+
 ## [1.7.1] - 2026-10-09
 
 ### Added
