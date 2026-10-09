@@ -355,3 +355,4 @@ export default function Review({ summary, previousSummary = null, month }) {
     </div>
   )
 }
+

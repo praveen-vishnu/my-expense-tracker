@@ -96,6 +96,26 @@ export function useTrackerData(authReady, authUser, month) {
     }))
   }, [])
 
+  const deleteBatchExpenses = useCallback((expenseIds) => {
+    if (!Array.isArray(expenseIds) || !expenseIds.length) return
+    const idSet = new Set(expenseIds)
+    setData((current) => ({
+      ...current,
+      expenses: current.expenses.filter((item) => !idSet.has(item.id)),
+    }))
+  }, [])
+
+  const updateBatchExpenses = useCallback((expenseIds, fields) => {
+    if (!Array.isArray(expenseIds) || !expenseIds.length || !fields) return
+    const idSet = new Set(expenseIds)
+    setData((current) => ({
+      ...current,
+      expenses: current.expenses.map((item) =>
+        idSet.has(item.id) ? { ...item, ...fields } : item
+      ),
+    }))
+  }, [])
+
   const saveIncome = useCallback((monthKey, amount) => {
     setData((current) => ({
       ...current,
@@ -202,6 +222,8 @@ export function useTrackerData(authReady, authUser, month) {
     upsertExpense,
     deleteExpense,
     importBatchExpenses,
+    deleteBatchExpenses,
+    updateBatchExpenses,
     saveIncome,
     deleteIncome,
     saveBudget,

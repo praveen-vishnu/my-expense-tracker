@@ -41,6 +41,8 @@ export default function App() {
     upsertExpense,
     deleteExpense,
     importBatchExpenses,
+    deleteBatchExpenses,
+    updateBatchExpenses,
     saveIncome,
     deleteIncome,
     saveBudget,
@@ -250,6 +252,9 @@ export default function App() {
             month={month}
             onEditExpense={handleOpenEditExpense}
             onDeleteExpense={handlePromptDeleteExpense}
+            onDeleteBatchExpenses={deleteBatchExpenses}
+            onUpdateBatchExpenses={updateBatchExpenses}
+            setConfirm={setConfirm}
           />
         ) : null}
 

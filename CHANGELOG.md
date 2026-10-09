@@ -6,6 +6,21 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-10-09
+
+### Added
+- Advanced Search, Filtering & Multi-Format Export Engine (`src/pages/History.jsx`):
+  - **Account-Aware Filtering**: Filter transactions by specific Bank, Credit Card, Cash wallet, or Unassigned expenses.
+  - **Time Scope Switching**: Seamlessly toggle between Selected Month and Cross-Month (All-Time) search.
+  - **RFC 4180 CSV Export (`src/utils/exportEngine.js`)**: Download filtered expenses as a formatted CSV with proper quoting and account mappings.
+  - **Printable Financial Statement (`src/components/StatementPrintModal.jsx`)**: Print or Save as PDF with clean letterhead, KPI metrics, account breakdown, and tabular transaction log.
+- Batch Transaction Operations:
+  - Multi-select checkbox mode in `ExpenseList.jsx` and `History.jsx`.
+  - Floating batch action bar supporting bulk deletion with confirmation, bulk category reassignment, and bulk account reassignment.
+  - `deleteBatchExpenses` and `updateBatchExpenses` hooks in `useTrackerData.js`.
+- Responsive styling and print stylesheets (`@media print`).
+- Unit tests for `exportEngine.js` (`10/10` tests passing).
+
 ## [1.10.0] - 2026-10-09
 
 ### Added
