@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import MonthSelector from './components/MonthSelector.jsx'
 import ExpenseForm from './components/ExpenseForm.jsx'
 import IncomeForm from './components/IncomeForm.jsx'
@@ -10,10 +10,11 @@ import Settings from './pages/Settings.jsx'
 import AuthForm from './components/AuthForm.jsx'
 import ThemeToggle from './components/ThemeToggle.jsx'
 import { monthSummary } from './utils/calculations.js'
-import { createId, currentMonthKey, formatINR, isValidDate, relativeDateLabel } from './utils/formatting.js'
-import { emptyData, loadData, saveData } from './utils/storage.js'
-import { isSupabaseConfigured, supabase } from './utils/supabase.js'
-import { addRecurringExpenses } from './utils/recurring.js'
+import { currentMonthKey, formatINR, relativeDateLabel } from './utils/formatting.js'
+import { isSupabaseConfigured } from './utils/supabase.js'
+import { useTheme } from './hooks/useTheme.js'
+import { useAuth } from './hooks/useAuth.js'
+import { useTrackerData } from './hooks/useTrackerData.js'
 
 const PAGES = [
   { id: 'dashboard', label: 'Dashboard' },
@@ -23,168 +24,136 @@ const PAGES = [
 ]
 
 export default function App() {
-  const [data, setData] = useState(() => emptyData())
-  const [authReady, setAuthReady] = useState(false)
-  const [authUser, setAuthUser] = useState(null)
-  const [passwordRecovery, setPasswordRecovery] = useState(false)
-  const [ready, setReady] = useState(false)
-  const [syncStatus, setSyncStatus] = useState('checking')
+  const { theme, toggleTheme } = useTheme()
+  const { authReady, authUser, setAuthUser, passwordRecovery, setPasswordRecovery, signOut } = useAuth()
   const [month, setMonth] = useState(() => currentMonthKey())
   const [page, setPage] = useState('dashboard')
   const [expenseForm, setExpenseForm] = useState(null)
   const [incomeForm, setIncomeForm] = useState(false)
   const [confirm, setConfirm] = useState(null)
-  const [theme, setTheme] = useState(() => {
-    try {
-      return localStorage.getItem('khaata-theme') === 'dark' ? 'dark' : 'light'
-    } catch {
-      return 'light'
-    }
-  })
 
-  useLayoutEffect(() => {
-    document.documentElement.dataset.theme = theme
-    try {
-      localStorage.setItem('khaata-theme', theme)
-    } catch {
-      return
-    }
-  }, [theme])
-
-  useEffect(() => {
-    if (!isSupabaseConfigured) {
-      setAuthUser({ id: 'local-user' })
-      setAuthReady(true)
-      return undefined
-    }
-
-    let active = true
-    supabase.auth.getSession().then(({ data: sessionData }) => {
-      if (!active) return
-      const user = sessionData.session?.user
-      if (user?.is_anonymous) {
-        supabase.auth.signOut()
-        setAuthUser(null)
-      } else {
-        setAuthUser(user || null)
-      }
-      setAuthReady(true)
-    })
-    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'PASSWORD_RECOVERY') setPasswordRecovery(true)
-      setAuthUser(session?.user?.is_anonymous ? null : session?.user || null)
-    })
-
-    return () => {
-      active = false
-      listener.subscription.unsubscribe()
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!authReady || !authUser) return undefined
-    let active = true
-    setReady(false)
-    loadData().then((loadedData) => {
-      if (!active) return
-      setData(loadedData)
-      setReady(true)
-      setSyncStatus(isSupabaseConfigured ? 'cloud' : 'local')
-    })
-    return () => {
-      active = false
-    }
-  }, [authReady, authUser])
-
-  useEffect(() => {
-    if (!ready) return
-    setSyncStatus('saving')
-    saveData(data).then((result) => {
-      setSyncStatus(result.remoteSaved ? 'cloud' : 'local')
-    })
-  }, [data, ready])
-
-  useEffect(() => {
-    if (!ready) return
-    setData((current) => addRecurringExpenses(current, month))
-  }, [data.recurringExpenses, month, ready])
+  const {
+    data,
+    ready,
+    syncStatus,
+    upsertExpense,
+    deleteExpense,
+    saveIncome,
+    deleteIncome,
+    saveBudget,
+    addRecurringExpense,
+    deleteRecurringExpense,
+    addCategory,
+    importData,
+    clearAllData,
+  } = useTrackerData(authReady, authUser, month)
 
   const summary = useMemo(() => monthSummary(data, month), [data, month])
+
+  const handleOpenAddExpense = useCallback(() => {
+    setExpenseForm({})
+  }, [])
+
+  const handleOpenEditExpense = useCallback((expense) => {
+    setExpenseForm({ expense })
+  }, [])
+
+  const handlePromptDeleteExpense = useCallback((expense) => {
+    setConfirm({
+      title: 'Delete expense?',
+      message: `${expense.category}${expense.note ? ` (${expense.note})` : ''} expense for ${formatINR(expense.amount)} from ${relativeDateLabel(expense.date)} will be removed.`,
+      confirmLabel: 'Delete expense',
+      onConfirm: () => {
+        deleteExpense(expense.id)
+        setConfirm(null)
+      },
+    })
+  }, [deleteExpense])
+
+  const handleOpenAddIncome = useCallback(() => {
+    setIncomeForm(true)
+  }, [])
+
+  const handlePromptDeleteIncome = useCallback(() => {
+    setConfirm({
+      title: 'Delete income?',
+      message: 'Income for this month will be removed.',
+      confirmLabel: 'Delete',
+      onConfirm: () => {
+        deleteIncome(month)
+        setConfirm(null)
+      },
+    })
+  }, [deleteIncome, month])
+
+  const handlePromptDeleteRecurring = useCallback((schedule) => {
+    setConfirm({
+      title: 'Remove recurring schedule?',
+      message: `${schedule.name} will no longer be generated in future months. Existing expenses will remain.`,
+      confirmLabel: 'Remove schedule',
+      onConfirm: () => {
+        deleteRecurringExpense(schedule.id)
+        setConfirm(null)
+      },
+    })
+  }, [deleteRecurringExpense])
+
+  const handlePromptClearAll = useCallback(() => {
+    setConfirm({
+      title: 'Delete everything?',
+      message: 'This will permanently delete all your income and expense data.',
+      confirmLabel: 'Delete Everything',
+      onConfirm: () => {
+        clearAllData()
+        setConfirm(null)
+      },
+    })
+  }, [clearAllData])
+
+  const handleSaveExpense = useCallback((fields) => {
+    upsertExpense(fields, expenseForm?.expense?.id)
+    setExpenseForm(null)
+    if (!expenseForm?.expense) {
+      setPage('dashboard')
+    }
+  }, [expenseForm, upsertExpense])
+
+  const handleSaveIncome = useCallback((amount) => {
+    saveIncome(month, amount)
+    setIncomeForm(false)
+  }, [month, saveIncome])
+
+  const handleSaveBudget = useCallback((amount) => {
+    saveBudget(month, amount)
+  }, [month, saveBudget])
 
   if (!authReady) {
     return <div className="loading-state" role="status" aria-live="polite">Checking your account...</div>
   }
 
   if (isSupabaseConfigured && !authUser) {
-    return <AuthForm theme={theme} onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} onAuthenticated={setAuthUser} />
+    return (
+      <AuthForm
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        onAuthenticated={setAuthUser}
+      />
+    )
   }
 
   if (passwordRecovery) {
-    return <AuthForm recovery theme={theme} onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} onAuthenticated={() => setPasswordRecovery(false)} />
+    return (
+      <AuthForm
+        recovery
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        onAuthenticated={() => setPasswordRecovery(false)}
+      />
+    )
   }
 
   if (!ready) {
     return <div className="loading-state" role="status" aria-live="polite">Loading your tracker...</div>
-  }
-
-  function upsertExpense(fields, existing) {
-    if (!isValidDate(fields.date)) return
-    setData((current) => {
-      if (existing) {
-        return {
-          ...current,
-          expenses: current.expenses.map((expense) =>
-            expense.id === existing.id ? { ...expense, ...fields } : expense,
-          ),
-        }
-      }
-      return {
-        ...current,
-        expenses: [{ id: createId(), ...fields }, ...current.expenses],
-      }
-    })
-    setExpenseForm(null)
-    if (!existing) setPage('dashboard')
-  }
-
-  function saveIncome(amount) {
-    setData((current) => ({
-      ...current,
-      income: { ...current.income, [month]: amount },
-    }))
-    setIncomeForm(false)
-  }
-
-  function deleteIncome() {
-    setData((current) => {
-      const next = { ...current.income }
-      delete next[month]
-      return { ...current, income: next }
-    })
-    setConfirm(null)
-  }
-
-  function deleteExpense(expense) {
-    setData((current) => ({
-      ...current,
-      expenses: current.expenses.filter((item) => item.id !== expense.id),
-    }))
-    setConfirm(null)
-  }
-
-  function addRecurringExpense(schedule) {
-    setData((current) => ({
-      ...current,
-      recurringExpenses: [...current.recurringExpenses, schedule],
-    }))
-  }
-
-  function deleteRecurringExpense(schedule) {
-    setData((current) => ({
-      ...current,
-      recurringExpenses: current.recurringExpenses.filter((item) => item.id !== schedule.id),
-    }))
-    setConfirm(null)
   }
 
   return (
@@ -208,8 +177,8 @@ export default function App() {
         </div>
         <MonthSelector month={month} onChange={setMonth} />
         <div className="topbar-actions">
-          <ThemeToggle theme={theme} onToggle={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} />
-          <button type="button" className="btn btn-primary add-desktop" onClick={() => setExpenseForm({})}>
+          <ThemeToggle theme={theme} onToggle={toggleTheme} />
+          <button type="button" className="btn btn-primary add-desktop" onClick={handleOpenAddExpense}>
             + Add Expense
           </button>
         </div>
@@ -233,90 +202,44 @@ export default function App() {
         {page === 'dashboard' ? (
           <Dashboard
             summary={summary}
-            onAddExpense={() => setExpenseForm({})}
-            onEditExpense={(expense) => setExpenseForm({ expense })}
-            onDeleteExpense={(expense) =>
-              setConfirm({
-                title: 'Delete expense?',
-                message: `${expense.category}${expense.note ? ` (${expense.note})` : ''} expense for ${formatINR(expense.amount)} from ${relativeDateLabel(expense.date)} will be removed.`,
-                confirmLabel: 'Delete expense',
-                onConfirm: () => deleteExpense(expense),
-              })
-            }
-            onAddIncome={() => setIncomeForm(true)}
-            onEditIncome={() => setIncomeForm(true)}
-            onDeleteIncome={() =>
-              setConfirm({
-                title: 'Delete income?',
-                message: `Income for this month will be removed.`,
-                confirmLabel: 'Delete',
-                onConfirm: deleteIncome,
-              })
-            }
+            onAddExpense={handleOpenAddExpense}
+            onEditExpense={handleOpenEditExpense}
+            onDeleteExpense={handlePromptDeleteExpense}
+            onAddIncome={handleOpenAddIncome}
+            onEditIncome={handleOpenAddIncome}
+            onDeleteIncome={handlePromptDeleteIncome}
           />
         ) : null}
+
         {page === 'history' ? (
           <History
             data={data}
             month={month}
-            onEditExpense={(expense) => setExpenseForm({ expense })}
-            onDeleteExpense={(expense) =>
-              setConfirm({
-                title: 'Delete expense?',
-                message: `${expense.category}${expense.note ? ` (${expense.note})` : ''} expense for ${formatINR(expense.amount)} from ${relativeDateLabel(expense.date)} will be removed.`,
-                confirmLabel: 'Delete expense',
-                onConfirm: () => deleteExpense(expense),
-              })
-            }
+            onEditExpense={handleOpenEditExpense}
+            onDeleteExpense={handlePromptDeleteExpense}
           />
         ) : null}
+
         {page === 'review' ? <Review summary={summary} /> : null}
+
         {page === 'settings' ? (
           <Settings
             data={data}
             month={month}
             budget={summary.budget}
-            onSaveBudget={(amount) =>
-              setData((current) => ({
-                ...current,
-                budgets: { ...current.budgets, [month]: amount },
-              }))
-            }
-            accountEmail={isSupabaseConfigured ? authUser.email : null}
-            onSignOut={() => supabase.auth.signOut()}
-            onImport={(next) => setData(next)}
-            onClear={() =>
-              setConfirm({
-                title: 'Delete everything?',
-                message:
-                  'This will permanently delete all your income and expense data.',
-                confirmLabel: 'Delete Everything',
-                onConfirm: () => {
-                  setData(emptyData())
-                  setConfirm(null)
-                },
-              })
-            }
-            onAddCategory={(name) =>
-              setData((current) => ({
-                ...current,
-                categories: [...current.categories, name],
-              }))
-            }
+            onSaveBudget={handleSaveBudget}
+            accountEmail={isSupabaseConfigured && authUser?.id !== 'local-user' ? authUser.email : null}
+            onSignOut={signOut}
+            onImport={importData}
+            onClear={handlePromptClearAll}
+            onAddCategory={addCategory}
             onAddRecurring={addRecurringExpense}
-            onDeleteRecurring={(schedule) =>
-              setConfirm({
-                title: 'Remove recurring expense?',
-                message: `${schedule.name} will no longer be generated in future months. Existing expenses will remain.`,
-                confirmLabel: 'Remove schedule',
-                onConfirm: () => deleteRecurringExpense(schedule),
-              })
-            }
+            onDeleteRecurring={handlePromptDeleteRecurring}
           />
         ) : null}
       </main>
 
-      <button type="button" className="fab" onClick={() => setExpenseForm({})}>
+      <button type="button" className="fab" onClick={handleOpenAddExpense} aria-label="Add new expense">
         + Add Expense
       </button>
 
@@ -330,7 +253,7 @@ export default function App() {
           }
           initial={expenseForm.expense}
           onCancel={() => setExpenseForm(null)}
-          onSave={(fields) => upsertExpense(fields, expenseForm.expense)}
+          onSave={handleSaveExpense}
         />
       ) : null}
 
@@ -339,7 +262,7 @@ export default function App() {
           month={month}
           initialAmount={summary.income}
           onCancel={() => setIncomeForm(false)}
-          onSave={saveIncome}
+          onSave={handleSaveIncome}
         />
       ) : null}
 

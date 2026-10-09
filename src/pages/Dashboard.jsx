@@ -76,7 +76,14 @@ export default function Dashboard({
         </div>
         {summary.budget ? (
           <>
-            <div className="budget-track" aria-hidden="true">
+            <div
+              className="budget-track"
+              role="progressbar"
+              aria-label="Monthly budget usage"
+              aria-valuenow={Math.min(Math.round(summary.budgetPercent), 100)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
               <div className="budget-fill" style={{ width: `${Math.min(summary.budgetPercent, 100)}%` }} />
             </div>
             <p className={`budget-caption ${summary.budgetRemaining < 0 ? 'negative' : 'muted'}`}>
@@ -108,7 +115,14 @@ export default function Dashboard({
                   <span>{row.category}</span>
                   <span className="money">{formatINR(row.total)}</span>
                 </div>
-                <div className="bar-track" aria-hidden="true">
+                <div
+                  className="bar-track"
+                  role="progressbar"
+                  aria-label={`${row.category} spending ratio`}
+                  aria-valuenow={Math.round(maxCategory ? (row.total / maxCategory) * 100 : 0)}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                >
                   <div
                     className="bar-fill"
                     style={{ width: `${maxCategory ? (row.total / maxCategory) * 100 : 0}%` }}

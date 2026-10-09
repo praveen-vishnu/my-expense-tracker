@@ -1,0 +1,163 @@
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { emptyData, loadData, saveData, normalizeData } from '../utils/storage.js'
+import { addRecurringExpenses } from '../utils/recurring.js'
+import { createId, isValidDate } from '../utils/formatting.js'
+import { isSupabaseConfigured } from '../utils/supabase.js'
+
+const DEBOUNCE_SAVE_MS = 350
+
+export function useTrackerData(authReady, authUser, month) {
+  const [data, setData] = useState(() => emptyData())
+  const [ready, setReady] = useState(false)
+  const [syncStatus, setSyncStatus] = useState('checking')
+  const saveTimeoutRef = useRef(null)
+  const isInitialLoadRef = useRef(true)
+
+  // 1. Initial Load
+  useEffect(() => {
+    if (!authReady || !authUser) return undefined
+    let active = true
+    setReady(false)
+    setSyncStatus('checking')
+
+    loadData().then((loadedData) => {
+      if (!active) return
+      const withRecurring = addRecurringExpenses(loadedData, month)
+      setData(withRecurring)
+      setReady(true)
+      setSyncStatus(isSupabaseConfigured ? 'cloud' : 'local')
+      isInitialLoadRef.current = false
+    })
+
+    return () => {
+      active = false
+    }
+  }, [authReady, authUser])
+
+  // 2. Materialize recurring expenses when month changes
+  useEffect(() => {
+    if (!ready) return
+    setData((current) => addRecurringExpenses(current, month))
+  }, [month, ready])
+
+  // 3. Debounced Save Effect
+  useEffect(() => {
+    if (!ready || isInitialLoadRef.current) return
+
+    setSyncStatus('saving')
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
+    }
+
+    saveTimeoutRef.current = setTimeout(() => {
+      saveData(data).then((result) => {
+        setSyncStatus(result.remoteSaved ? 'cloud' : 'local')
+      })
+    }, DEBOUNCE_SAVE_MS)
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+    }
+  }, [data, ready])
+
+  // Mutation Handlers
+  const upsertExpense = useCallback((fields, existingId) => {
+    if (!isValidDate(fields.date)) return
+    setData((current) => {
+      if (existingId) {
+        return {
+          ...current,
+          expenses: current.expenses.map((expense) =>
+            expense.id === existingId ? { ...expense, ...fields } : expense
+          ),
+        }
+      }
+      return {
+        ...current,
+        expenses: [{ id: createId(), ...fields }, ...current.expenses],
+      }
+    })
+  }, [])
+
+  const deleteExpense = useCallback((expenseId) => {
+    setData((current) => ({
+      ...current,
+      expenses: current.expenses.filter((item) => item.id !== expenseId),
+    }))
+  }, [])
+
+  const saveIncome = useCallback((monthKey, amount) => {
+    setData((current) => ({
+      ...current,
+      income: { ...current.income, [monthKey]: amount },
+    }))
+  }, [])
+
+  const deleteIncome = useCallback((monthKey) => {
+    setData((current) => {
+      const next = { ...current.income }
+      delete next[monthKey]
+      return { ...current, income: next }
+    })
+  }, [])
+
+  const saveBudget = useCallback((monthKey, amount) => {
+    setData((current) => ({
+      ...current,
+      budgets: { ...current.budgets, [monthKey]: amount },
+    }))
+  }, [])
+
+  const addRecurringExpense = useCallback((schedule) => {
+    setData((current) => ({
+      ...current,
+      recurringExpenses: [...current.recurringExpenses, schedule],
+    }))
+  }, [])
+
+  const deleteRecurringExpense = useCallback((scheduleId) => {
+    setData((current) => ({
+      ...current,
+      recurringExpenses: current.recurringExpenses.filter((item) => item.id !== scheduleId),
+    }))
+  }, [])
+
+  const addCategory = useCallback((name) => {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    setData((current) => {
+      if (current.categories.includes(trimmed)) return current
+      return {
+        ...current,
+        categories: [...current.categories, trimmed],
+      }
+    })
+  }, [])
+
+  const importData = useCallback((imported) => {
+    setData(normalizeData(imported))
+  }, [])
+
+  const clearAllData = useCallback(() => {
+    setData(emptyData())
+  }, [])
+
+  return {
+    data,
+    setData,
+    ready,
+    syncStatus,
+    upsertExpense,
+    deleteExpense,
+    saveIncome,
+    deleteIncome,
+    saveBudget,
+    addRecurringExpense,
+    deleteRecurringExpense,
+    addCategory,
+    importData,
+    clearAllData,
+  }
+}

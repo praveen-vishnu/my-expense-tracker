@@ -43,7 +43,14 @@ export default function Review({ summary }) {
                   <span>{row.category}</span>
                   <span className="money">{formatINR(row.total)}</span>
                 </div>
-                <div className="chart-track" aria-hidden="true">
+                <div
+                  className="chart-track"
+                  role="progressbar"
+                  aria-label={`${row.category} spending ratio`}
+                  aria-valuenow={Math.round(chartMax ? (row.total / chartMax) * 100 : 0)}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                >
                   <div
                     className="chart-fill"
                     style={{ width: `${chartMax ? (row.total / chartMax) * 100 : 0}%` }}
