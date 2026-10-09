@@ -62,3 +62,4 @@ select
   (select count(*) from public.accounts) as total_accounts_count,
   (select count(*) from public.expenses where account_id is not null) as tagged_expenses_count,
   (select count(*) from public.expenses where account_id is null) as untagged_expenses_count;
+

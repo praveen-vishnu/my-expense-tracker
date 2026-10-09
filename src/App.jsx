@@ -3,6 +3,7 @@ import MonthSelector from './components/MonthSelector.jsx'
 import ExpenseForm from './components/ExpenseForm.jsx'
 import IncomeForm from './components/IncomeForm.jsx'
 import ConfirmDialog from './components/ConfirmDialog.jsx'
+import StatementImportModal from './components/StatementImportModal.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import History from './pages/History.jsx'
 import Review from './pages/Review.jsx'
@@ -30,6 +31,7 @@ export default function App() {
   const [page, setPage] = useState('dashboard')
   const [expenseForm, setExpenseForm] = useState(null)
   const [incomeForm, setIncomeForm] = useState(false)
+  const [statementModal, setStatementModal] = useState(false)
   const [confirm, setConfirm] = useState(null)
 
   const {
@@ -38,6 +40,7 @@ export default function App() {
     syncStatus,
     upsertExpense,
     deleteExpense,
+    importBatchExpenses,
     saveIncome,
     deleteIncome,
     saveBudget,
@@ -197,6 +200,14 @@ export default function App() {
         <MonthSelector month={month} onChange={setMonth} />
         <div className="topbar-actions">
           <ThemeToggle theme={theme} onToggle={toggleTheme} />
+          <button
+            type="button"
+            className="btn btn-secondary import-desktop-btn"
+            onClick={() => setStatementModal(true)}
+            title="Import bank statement (CSV)"
+          >
+            Import CSV
+          </button>
           <button type="button" className="btn btn-primary add-desktop" onClick={handleOpenAddExpense}>
             + Add Expense
           </button>
@@ -251,6 +262,7 @@ export default function App() {
             accountEmail={isSupabaseConfigured && authUser?.id !== 'local-user' ? authUser.email : null}
             onSignOut={signOut}
             onImport={importData}
+            onImportStatement={() => setStatementModal(true)}
             onClear={handlePromptClearAll}
             onAddCategory={addCategory}
             onAddRecurring={addRecurringExpense}
@@ -290,6 +302,16 @@ export default function App() {
         />
       ) : null}
 
+      {statementModal ? (
+        <StatementImportModal
+          categories={data.categories}
+          accounts={data.accounts || []}
+          existingExpenses={data.expenses}
+          onImportBatch={importBatchExpenses}
+          onDismiss={() => setStatementModal(false)}
+        />
+      ) : null}
+
       {confirm ? (
         <ConfirmDialog
           title={confirm.title}
@@ -303,3 +325,4 @@ export default function App() {
     </div>
   )
 }
+

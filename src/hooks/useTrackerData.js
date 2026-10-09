@@ -88,6 +88,14 @@ export function useTrackerData(authReady, authUser, month) {
     }))
   }, [])
 
+  const importBatchExpenses = useCallback((newExpenses) => {
+    if (!Array.isArray(newExpenses) || !newExpenses.length) return
+    setData((current) => ({
+      ...current,
+      expenses: [...newExpenses, ...current.expenses],
+    }))
+  }, [])
+
   const saveIncome = useCallback((monthKey, amount) => {
     setData((current) => ({
       ...current,
@@ -193,6 +201,7 @@ export function useTrackerData(authReady, authUser, month) {
     syncStatus,
     upsertExpense,
     deleteExpense,
+    importBatchExpenses,
     saveIncome,
     deleteIncome,
     saveBudget,

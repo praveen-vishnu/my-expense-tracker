@@ -7,6 +7,7 @@ export default function Settings({
   accountEmail,
   onSignOut,
   onImport,
+  onImportStatement,
   onClear,
   onAddCategory,
   month,
@@ -419,8 +420,13 @@ export default function Settings({
             Export Data
           </button>
           <button type="button" className="btn btn-secondary" onClick={() => fileRef.current?.click()}>
-            Import Data
+            Import Data (JSON)
           </button>
+          {onImportStatement ? (
+            <button type="button" className="btn btn-secondary" onClick={onImportStatement}>
+              Import Statement (CSV)
+            </button>
+          ) : null}
           <button type="button" className="btn btn-danger" onClick={onClear}>
             Clear All Data
           </button>
@@ -438,3 +444,4 @@ export default function Settings({
     </div>
   )
 }
+

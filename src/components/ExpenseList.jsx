@@ -51,3 +51,4 @@ export default function ExpenseList({ groups, accounts = [], onEdit, onDelete, e
     </div>
   )
 }
+

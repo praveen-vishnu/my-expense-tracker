@@ -5,6 +5,7 @@ export default function ModalSheet({
   descriptionId,
   initialFocusRef,
   onDismiss,
+  className = '',
   children,
 }) {
   const dialogRef = useRef(null)
@@ -47,7 +48,7 @@ export default function ModalSheet({
   return (
     <dialog
       ref={dialogRef}
-      className="sheet"
+      className={`sheet ${className}`.trim()}
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}

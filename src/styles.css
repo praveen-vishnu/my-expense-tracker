@@ -1814,3 +1814,221 @@ h2 {
 :root[data-theme='dark'] .theme-toggle[aria-pressed='true'] {
   background: rgb(130 201 174 / 0.12);
 }
+
+/* STATEMENT IMPORT MODAL & RECONCILIATION */
+.sheet-wide {
+  width: min(840px, 96vw) !important;
+}
+
+.import-modal-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+  width: 100%;
+}
+
+.import-upload-stage {
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem 0;
+}
+
+.dropzone {
+  border: 2px dashed rgba(122, 127, 123, 0.35);
+  border-radius: 16px;
+  padding: 3rem 1.5rem;
+  text-align: center;
+  cursor: pointer;
+  background: rgba(122, 127, 123, 0.04);
+  transition: all 180ms ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.dropzone:hover,
+.dropzone.active {
+  border-color: var(--pine);
+  background: rgba(24, 111, 98, 0.08);
+  transform: translateY(-1px);
+}
+
+.dropzone p {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.dropzone small {
+  font-size: 0.8rem;
+  max-width: 420px;
+}
+
+.import-preview-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.import-summary-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: rgba(122, 127, 123, 0.08);
+  border-radius: 12px;
+}
+
+.summary-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.duplicate-alert {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.12);
+  padding: 0.35rem 0.65rem;
+  border-radius: 8px;
+}
+
+.batch-toggle-btns {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.import-table-container {
+  max-height: 380px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+}
+
+.import-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  text-align: left;
+}
+
+.import-table th {
+  position: sticky;
+  top: 0;
+  background: var(--paper);
+  z-index: 2;
+  border-bottom: 2px solid var(--line);
+  padding: 0.7rem 0.75rem;
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.import-table td {
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid rgba(122, 127, 123, 0.12);
+  vertical-align: middle;
+}
+
+.import-table tr.row-dimmed {
+  opacity: 0.55;
+  background: rgba(122, 127, 123, 0.03);
+}
+
+.import-table tr:hover:not(.row-dimmed) {
+  background: rgba(24, 111, 98, 0.03);
+}
+
+.table-date {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.dup-badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  background: rgba(245, 158, 11, 0.15);
+  color: #b45309;
+}
+
+.table-select {
+  padding: 0.35rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  font-size: 0.82rem;
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  max-width: 160px;
+}
+
+.import-dialog-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding-top: 0.5rem;
+}
+
+.import-desktop-btn {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  .import-desktop-btn {
+    display: inline-flex;
+  }
+}
+
+/* Dark mode overrides for import modal */
+:root[data-theme='dark'] .dropzone {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+:root[data-theme='dark'] .dropzone:hover,
+:root[data-theme='dark'] .dropzone.active {
+  background: rgba(157, 219, 193, 0.08);
+  border-color: #9ddbc1;
+}
+
+:root[data-theme='dark'] .duplicate-alert {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.2);
+}
+
+:root[data-theme='dark'] .dup-badge {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.2);
+}
+
+:root[data-theme='dark'] .import-table-container {
+  background: #1b2420;
+}
+
+:root[data-theme='dark'] .import-table th {
+  background: #202a26;
+}
+
+:root[data-theme='dark'] .table-select {
+  background: #1b2420;
+  border-color: #46554d;
+  color: var(--ink);
+}
+

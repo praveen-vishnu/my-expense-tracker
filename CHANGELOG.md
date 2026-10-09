@@ -6,6 +6,23 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-10-09
+
+### Added
+- Smart Statement Ingestion & CSV Reconciliation Engine (`src/utils/csvParser.js`):
+  - Client-side parser for major Indian bank statement CSVs (HDFC, SBI, ICICI, Axis, Kotak, and generic formats).
+  - Robust Indian & ISO date parsing (`DD/MM/YYYY`, `DD-MM-YYYY`, `DD Mon YYYY`, `YYYY-MM-DD`).
+  - Automated merchant narration cleaner (`cleanNarration`) removing cryptic UPI prefixes (`UPI/REF/`, `POS `, `NEFT-`, card masks).
+  - Predictive auto-categorization rule engine (`predictCategory`) mapping merchants to user categories (Swiggy/Zomato -> Food, Blinkit/Zepto -> Groceries, Uber/Ola -> Travel, etc.).
+  - Duplicate detection engine flagging transactions that match existing records by amount, date, and merchant.
+- Interactive Reconciliation Modal (`StatementImportModal.jsx`):
+  - Drag-and-drop CSV upload zone with file selection fallback.
+  - Target account selector linking imported transactions to user's bank accounts or cards.
+  - Interactive transaction review table with category pickers, duplicate badges, and individual toggles.
+  - Batch select/deselect controls with total amount calculation.
+- Topbar "Import CSV" button and Settings "Import Statement (CSV)" shortcut.
+- Full light & dark mode support and unit test coverage for parser routines.
+
 ## [1.8.0] - 2026-10-09
 
 ### Added
