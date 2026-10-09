@@ -12,14 +12,14 @@ export default function Dashboard({
   onDeleteIncome,
 }) {
   const maxCategory = summary.categories[0]?.total || 0
-  const recent = groupExpensesByDate(summary.expenses).slice(0, 4)
+  const recent = groupExpensesByDate(summary.expenses).slice(0, 5)
   const recentItems = recent.map((group) => ({
     ...group,
-    items: group.items.slice(0, 4),
+    items: group.items.slice(0, 5),
   }))
 
   return (
-    <div className="page">
+    <div className="page dashboard-page">
       <header className="page-intro">
         <h1>{formatMonthLabel(summary.monthKey)}</h1>
         <p>A snapshot of what came in, what went out, and where it went.</p>
@@ -62,94 +62,149 @@ export default function Dashboard({
         </article>
       </section>
 
-      <section className={`budget-panel ${summary.budget && summary.spent > summary.budget ? 'over-budget' : ''}`}>
-        <div className="panel-head">
-          <div>
-            <h2>Monthly budget</h2>
-            <p className="muted">
-              {summary.budget ? `${formatINR(summary.spent)} of ${formatINR(summary.budget)} used` : 'Set a budget to track your pace.'}
-            </p>
-          </div>
-          <span className="budget-amount money">
-            {summary.budget ? formatINR(Math.max(summary.budgetRemaining, 0)) : 'Not set'}
-          </span>
-        </div>
-        {summary.budget ? (
-          <>
-            <div
-              className="budget-track"
-              role="progressbar"
-              aria-label="Monthly budget usage"
-              aria-valuenow={Math.min(Math.round(summary.budgetPercent), 100)}
-              aria-valuemin={0}
-              aria-valuemax={100}
-            >
-              <div className="budget-fill" style={{ width: `${Math.min(summary.budgetPercent, 100)}%` }} />
+      <div className="dashboard-columns">
+        <div className="dashboard-main-col">
+          <section className={`budget-panel ${summary.budget && summary.spent > summary.budget ? 'over-budget' : ''}`}>
+            <div className="panel-head">
+              <div>
+                <h2>Monthly budget</h2>
+                <p className="muted">
+                  {summary.budget
+                    ? `${formatINR(summary.spent)} of ${formatINR(summary.budget)} used`
+                    : 'Set a budget to track your pace.'}
+                </p>
+              </div>
+              <span className="budget-amount money">
+                {summary.budget ? formatINR(Math.max(summary.budgetRemaining, 0)) : 'Not set'}
+              </span>
             </div>
-            <p className={`budget-caption ${summary.budgetRemaining < 0 ? 'negative' : 'muted'}`}>
-              {summary.budgetRemaining < 0
-                ? `${formatINR(Math.abs(summary.budgetRemaining))} over budget`
-                : `${Math.round(summary.budgetPercent)}% used`}
-            </p>
-          </>
-        ) : null}
-      </section>
-
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Spending by category</h2>
-        </div>
-        {summary.categories.length === 0 ? (
-          <div className="empty-state">
-            <p>No expenses yet.</p>
-            <p>Start tracking your spending.</p>
-            <button type="button" className="btn btn-primary" onClick={onAddExpense}>
-              + Add Expense
-            </button>
-          </div>
-        ) : (
-          <ul className="bars">
-            {summary.categories.map((row) => (
-              <li key={row.category}>
-                <div className="bar-meta">
-                  <span>{row.category}</span>
-                  <span className="money">{formatINR(row.total)}</span>
-                </div>
+            {summary.budget ? (
+              <>
                 <div
-                  className="bar-track"
+                  className="budget-track"
                   role="progressbar"
-                  aria-label={`${row.category} spending ratio`}
-                  aria-valuenow={Math.round(maxCategory ? (row.total / maxCategory) * 100 : 0)}
+                  aria-label="Monthly budget usage"
+                  aria-valuenow={Math.min(Math.round(summary.budgetPercent), 100)}
                   aria-valuemin={0}
                   aria-valuemax={100}
                 >
-                  <div
-                    className="bar-fill"
-                    style={{ width: `${maxCategory ? (row.total / maxCategory) * 100 : 0}%` }}
-                  />
+                  <div className="budget-fill" style={{ width: `${Math.min(summary.budgetPercent, 100)}%` }} />
                 </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+                <p className={`budget-caption ${summary.budgetRemaining < 0 ? 'negative' : 'muted'}`}>
+                  {summary.budgetRemaining < 0
+                    ? `${formatINR(Math.abs(summary.budgetRemaining))} over budget`
+                    : `${Math.round(summary.budgetPercent)}% used`}
+                </p>
+              </>
+            ) : null}
 
-      {summary.expenses.length > 0 ? (
-        <section className="panel">
-          <div className="panel-head">
-            <h2>Recent expenses</h2>
-            <button type="button" className="text-btn" onClick={onAddExpense}>
-              + Add Expense
-            </button>
-          </div>
-          <ExpenseList
-            groups={recentItems}
-            onEdit={onEditExpense}
-            onDelete={onDeleteExpense}
-            emptyMessage="No expenses yet."
-          />
-        </section>
-      ) : null}
+            {(summary.budget > 0 || summary.spent > 0) && summary.elapsedDays > 0 ? (
+              <div className={`pace-insight pace-${summary.burnRateStatus}`}>
+                <div className="pace-header">
+                  <span className="pace-badge">
+                    {summary.burnRateStatus === 'exceeded'
+                      ? '● Budget exceeded'
+                      : summary.burnRateStatus === 'warning'
+                        ? '▲ Pacing over budget'
+                        : '✓ Pacing on track'}
+                  </span>
+                  {summary.budget > 0 && summary.burnRateStatus === 'warning' && summary.projectedExhaustionDay ? (
+                    <span className="pace-exhaustion">
+                      Exhaustion ~Day {summary.projectedExhaustionDay} of {summary.totalDays}
+                    </span>
+                  ) : null}
+                </div>
+
+                <div className="pace-metrics">
+                  <div className="pace-stat">
+                    <small>Daily burn rate</small>
+                    <strong>{formatINR(summary.averageDaily)}<span className="pace-unit">/day</span></strong>
+                    <span>{summary.elapsedDays} of {summary.totalDays} days passed</span>
+                  </div>
+                  <div className="pace-stat">
+                    <small>Projected month-end</small>
+                    <strong className={summary.projectedSpend > summary.budget && summary.budget > 0 ? 'money spent' : 'money'}>
+                      {formatINR(summary.projectedSpend)}
+                    </strong>
+                    <span>
+                      {summary.budget > 0
+                        ? summary.projectedOverBudget > 0
+                          ? `+${formatINR(summary.projectedOverBudget)} over`
+                          : `${formatINR(summary.budget - summary.projectedSpend)} buffer`
+                        : 'At current rate'}
+                    </span>
+                  </div>
+                  {summary.budget > 0 && summary.remainingDays > 0 ? (
+                    <div className="pace-stat">
+                      <small>Safe daily pace</small>
+                      <strong>{formatINR(summary.safeDailySpend)}<span className="pace-unit">/day</span></strong>
+                      <span>For next {summary.remainingDays} days</span>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+          </section>
+
+          <section className="panel">
+            <div className="panel-head">
+              <h2>Spending by category</h2>
+            </div>
+            {summary.categories.length === 0 ? (
+              <div className="empty-state">
+                <p>No expenses yet.</p>
+                <p>Start tracking your spending.</p>
+                <button type="button" className="btn btn-primary" onClick={onAddExpense}>
+                  + Add Expense
+                </button>
+              </div>
+            ) : (
+              <ul className="bars">
+                {summary.categories.map((row) => (
+                  <li key={row.category}>
+                    <div className="bar-meta">
+                      <span>{row.category}</span>
+                      <span className="money">{formatINR(row.total)}</span>
+                    </div>
+                    <div
+                      className="bar-track"
+                      role="progressbar"
+                      aria-label={`${row.category} spending ratio`}
+                      aria-valuenow={Math.round(maxCategory ? (row.total / maxCategory) * 100 : 0)}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                    >
+                      <div
+                        className="bar-fill"
+                        style={{ width: `${maxCategory ? (row.total / maxCategory) * 100 : 0}%` }}
+                      />
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </div>
+
+        <div className="dashboard-side-col">
+          {summary.expenses.length > 0 ? (
+            <section className="panel recent-panel">
+              <div className="panel-head">
+                <h2>Recent expenses</h2>
+                <button type="button" className="text-btn" onClick={onAddExpense}>
+                  + Add Expense
+                </button>
+              </div>
+              <ExpenseList
+                groups={recentItems}
+                onEdit={onEditExpense}
+                onDelete={onDeleteExpense}
+                emptyMessage="No expenses yet."
+              />
+            </section>
+          ) : null}
+        </div>
+      </div>
     </div>
   )
 }

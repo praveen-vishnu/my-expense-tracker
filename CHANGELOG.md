@@ -6,6 +6,28 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-10-09
+
+### Added
+- Real-time spending pace and burn-rate intelligence card on Dashboard: tracks daily burn rate, projected month-end spend, safe daily budget allowance, and budget exhaustion date projections.
+- Filter summary metric bar on History view displaying matched expense counts, filtered total sum, and average transaction amount.
+- High-density responsive 2-column desktop layout on Dashboard, placing budget analytics and recent transactions side-by-side.
+
+### Changed
+- Expanded desktop application max-width to 1180px on displays >= 1100px.
+
+## [1.7.0] - 2026-10-09
+
+### Added
+- Direct interactive month-picker jump functionality to MonthSelector.
+- Normalized relational database schema with PostgreSQL tables for expenses, incomes, budgets, and recurring schedules with Row Level Security (RLS) and B-Tree indexes.
+- Idempotent data unpacking script for existing users' JSON blobs.
+
+### Changed
+- Deconstructed monolithic App root component into modular hooks (useTrackerData, useAuth, useTheme) and an expense service layer.
+- Added 350ms debounced cloud persistence to prevent network thrashing.
+- Replaced aria-hidden progress bars with accessible progressbar semantics.
+
 ## [1.6.0] - 2026-10-04
 
 ### Added

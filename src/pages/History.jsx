@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import ExpenseList from '../components/ExpenseList.jsx'
 import { expensesForMonth, groupExpensesByDate } from '../utils/calculations.js'
-import { formatMonthLabel } from '../utils/formatting.js'
+import { formatINR, formatMonthLabel } from '../utils/formatting.js'
 
 export default function History({
   data,
@@ -18,11 +18,11 @@ export default function History({
 
   const monthExpenses = useMemo(() => expensesForMonth(data.expenses, month), [data.expenses, month])
 
-  const groups = useMemo(() => {
+  const filteredList = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
     const minimum = minAmount === '' ? 0 : Number(minAmount)
     const maximum = maxAmount === '' ? Infinity : Number(maxAmount)
-    let list = monthExpenses.filter((expense) => {
+    return monthExpenses.filter((expense) => {
       const matchesQuery = !normalizedQuery ||
         expense.category.toLowerCase().includes(normalizedQuery) ||
         expense.note.toLowerCase().includes(normalizedQuery)
@@ -33,8 +33,14 @@ export default function History({
       const matchesMaximum = !Number.isNaN(maximum) && expense.amount <= maximum
       return matchesQuery && matchesCategory && matchesFrom && matchesTo && matchesMinimum && matchesMaximum
     })
-    return groupExpensesByDate(list)
   }, [monthExpenses, query, category, fromDate, toDate, minAmount, maxAmount])
+
+  const groups = useMemo(() => groupExpensesByDate(filteredList), [filteredList])
+
+  const filteredTotal = useMemo(
+    () => filteredList.reduce((sum, item) => sum + item.amount, 0),
+    [filteredList]
+  )
 
   const usedCategories = useMemo(() => {
     return [...new Set(monthExpenses.map((expense) => expense.category))].sort()
@@ -101,6 +107,23 @@ export default function History({
           </button>
         ) : null}
       </form>
+
+      {monthExpenses.length > 0 ? (
+        <div className="filter-summary-bar">
+          <div className="filter-summary-metric">
+            <small>Matched Expenses</small>
+            <strong>{filteredList.length} <span className="muted-count">of {monthExpenses.length}</span></strong>
+          </div>
+          <div className="filter-summary-metric">
+            <small>Filtered Total</small>
+            <strong className="money">{formatINR(filteredTotal)}</strong>
+          </div>
+          <div className="filter-summary-metric">
+            <small>Average</small>
+            <strong className="money">{formatINR(filteredList.length ? filteredTotal / filteredList.length : 0)}</strong>
+          </div>
+        </div>
+      ) : null}
 
       <section className="panel">
         <ExpenseList

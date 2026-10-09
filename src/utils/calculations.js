@@ -73,21 +73,55 @@ export function monthSummary(data, monthKey, now = new Date()) {
   const budget = Number(data.budgets?.[monthKey]) || 0
   const spent = sumExpenses(monthExpenses)
   const count = monthExpenses.length
+  const totalDays = daysInMonth(monthKey)
   const elapsedDays = elapsedDaysInMonth(monthKey, now)
+  const remainingDays = Math.max(totalDays - elapsedDays, 0)
+  const averageDaily = averageDailySpending(spent, elapsedDays)
+  const projectedSpend = elapsedDays > 0 ? averageDaily * totalDays : spent
+  const budgetRemaining = budget - spent
+  const budgetPercent = budget ? (spent / budget) * 100 : 0
+
+  let burnRateStatus = 'on-track'
+  let safeDailySpend = 0
+  let projectedOverBudget = 0
+  let projectedExhaustionDay = null
+
+  if (budget > 0) {
+    safeDailySpend = remainingDays > 0 ? Math.max(budgetRemaining / remainingDays, 0) : 0
+    projectedOverBudget = projectedSpend > budget ? projectedSpend - budget : 0
+    if (averageDaily > 0) {
+      projectedExhaustionDay = Math.min(Math.ceil(budget / averageDaily), totalDays)
+    }
+
+    if (spent > budget) {
+      burnRateStatus = 'exceeded'
+    } else if (projectedSpend > budget) {
+      burnRateStatus = 'warning'
+    } else {
+      burnRateStatus = 'on-track'
+    }
+  }
 
   return {
     monthKey,
     income,
     budget,
     spent,
-    budgetRemaining: budget - spent,
-    budgetPercent: budget ? (spent / budget) * 100 : 0,
+    budgetRemaining,
+    budgetPercent,
     remaining: remainingBalance(income, spent),
     expenses: monthExpenses,
     count,
     averageExpense: averageExpense(spent, count),
+    totalDays,
     elapsedDays,
-    averageDaily: averageDailySpending(spent, elapsedDays),
+    remainingDays,
+    averageDaily,
+    projectedSpend,
+    safeDailySpend,
+    projectedOverBudget,
+    projectedExhaustionDay,
+    burnRateStatus,
     categories: categoryTotals(monthExpenses),
   }
 }

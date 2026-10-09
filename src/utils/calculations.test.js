@@ -38,3 +38,28 @@ test('monthSummary exposes chart-ready category totals for the selected month', 
     { category: 'Travel', total: 100 },
   ])
 })
+
+test('monthSummary computes projected spend, daily pace, and burn rate status correctly', () => {
+  const summary = monthSummary(
+    {
+      income: { '2026-09': 100000 },
+      expenses: [
+        { date: '2026-09-05', category: 'Food', amount: 3000 },
+        { date: '2026-09-10', category: 'Shopping', amount: 4500 },
+      ],
+      budgets: { '2026-09': 15000 },
+    },
+    '2026-09',
+    new Date('2026-09-15T12:00:00Z'),
+  )
+
+  // September has 30 days. Elapsed = 15 days. Remaining = 15 days.
+  assert.equal(summary.spent, 7500)
+  assert.equal(summary.elapsedDays, 15)
+  assert.equal(summary.remainingDays, 15)
+  assert.equal(summary.averageDaily, 500) // 7500 / 15
+  assert.equal(summary.projectedSpend, 15000) // 500 * 30
+  assert.equal(summary.safeDailySpend, 500) // (15000 - 7500) / 15
+  assert.equal(summary.burnRateStatus, 'on-track')
+})
+
