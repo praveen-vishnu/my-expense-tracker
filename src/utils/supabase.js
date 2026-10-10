@@ -12,8 +12,8 @@ export function getAuthRedirectUrl() {
   if (import.meta.env.VITE_SITE_URL) {
     return import.meta.env.VITE_SITE_URL.replace(/\/+$/, '')
   }
-  if (typeof window !== 'undefined' && window.location?.origin) {
+  if (typeof window !== 'undefined' && window.location?.origin && !window.location.origin.includes('localhost')) {
     return window.location.origin
   }
-  return ''
+  return 'https://my-expense-tracker-peach.vercel.app'
 }
