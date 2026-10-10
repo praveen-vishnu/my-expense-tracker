@@ -7,3 +7,13 @@ export const supabase =
   supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null
 
 export const isSupabaseConfigured = Boolean(supabase)
+
+export function getAuthRedirectUrl() {
+  if (import.meta.env.VITE_SITE_URL) {
+    return import.meta.env.VITE_SITE_URL.replace(/\/+$/, '')
+  }
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin
+  }
+  return ''
+}

@@ -88,7 +88,37 @@ h2 {
   display: flex;
   align-items: center;
   justify-self: end;
-  gap: 0.6rem;
+  gap: 0.5rem;
+}
+
+.topbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.85rem;
+  min-height: 38px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border-radius: 999px;
+}
+
+.topbar-btn svg {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.add-desktop {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 1rem;
+  min-height: 38px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.btn-label-desktop {
+  display: inline;
 }
 
 .theme-toggle {
@@ -1398,6 +1428,17 @@ h2 {
   .topbar-actions {
     grid-column: 2;
     grid-row: 1;
+    gap: 0.35rem;
+  }
+
+  .topbar-btn {
+    padding: 0.4rem 0.55rem;
+    min-height: 36px;
+    gap: 0.25rem;
+  }
+
+  .btn-label-desktop {
+    display: none;
   }
 
   .add-desktop {
@@ -1984,16 +2025,6 @@ h2 {
   align-items: center;
   gap: 1rem;
   padding-top: 0.5rem;
-}
-
-.import-desktop-btn {
-  display: none;
-}
-
-@media (min-width: 768px) {
-  .import-desktop-btn {
-    display: inline-flex;
-  }
 }
 
 /* Dark mode overrides for import modal */

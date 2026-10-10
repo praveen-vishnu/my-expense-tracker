@@ -1,7 +1,7 @@
 import { formatINR, formatMonthLabel } from '../utils/formatting.js'
 import { groupExpensesByDate } from '../utils/calculations.js'
 import ExpenseList from '../components/ExpenseList.jsx'
-import { IconAlertTriangle, IconTarget } from '@tabler/icons-react'
+import { IconAlertTriangle, IconTarget, IconCamera } from '@tabler/icons-react'
 
 export default function Dashboard({
   summary,
@@ -288,10 +288,16 @@ export default function Dashboard({
             <section className="panel recent-panel">
               <div className="panel-head">
                 <h2>Recent expenses</h2>
-                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
                   {onScanReceipt ? (
-                    <button type="button" className="text-btn" onClick={onScanReceipt}>
-                      📷 Scan Bill
+                    <button
+                      type="button"
+                      className="text-btn"
+                      onClick={onScanReceipt}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.85rem' }}
+                    >
+                      <IconCamera size={15} />
+                      <span>Scan Bill</span>
                     </button>
                   ) : null}
                   <button type="button" className="text-btn" onClick={onAddExpense}>

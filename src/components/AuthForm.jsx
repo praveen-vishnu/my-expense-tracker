@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { supabase } from '../utils/supabase.js'
+import { supabase, getAuthRedirectUrl } from '../utils/supabase.js'
 import ThemeToggle from './ThemeToggle.jsx'
 
 export default function AuthForm({ onAuthenticated, recovery = false, theme, onToggleTheme }) {
@@ -16,15 +16,33 @@ export default function AuthForm({ onAuthenticated, recovery = false, theme, onT
     setMessage('')
     setError('')
 
-    const result = recovery
-      ? await supabase.auth.updateUser({ password })
-      : mode === 'reset'
-        ? await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: window.location.origin,
-          })
-        : mode === 'sign-in'
-          ? await supabase.auth.signInWithPassword({ email, password })
-          : await supabase.auth.signUp({ email, password })
+    const redirectUrl = getAuthRedirectUrl()
+
+    let result
+    if (recovery) {
+      result = await supabase.auth.updateUser({ password })
+    } else if (mode === 'reset') {
+      result = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: redirectUrl,
+      })
+    } else if (mode === 'magic-link') {
+      result = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: redirectUrl,
+        },
+      })
+    } else if (mode === 'sign-in') {
+      result = await supabase.auth.signInWithPassword({ email, password })
+    } else {
+      result = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: redirectUrl,
+        },
+      })
+    }
 
     setBusy(false)
     if (result.error) {
@@ -34,12 +52,20 @@ export default function AuthForm({ onAuthenticated, recovery = false, theme, onT
 
     if (recovery) {
       setMessage('Password updated. Your account is ready to use.')
-      onAuthenticated((await supabase.auth.getUser()).data.user)
+      const { data } = await supabase.auth.getUser()
+      if (data?.user) {
+        onAuthenticated(data.user)
+      }
       return
     }
 
     if (mode === 'reset') {
-      setMessage('Password reset email sent. Check your inbox.')
+      setMessage('Password reset email sent! Check your inbox and follow the link to choose a new password.')
+      return
+    }
+
+    if (mode === 'magic-link') {
+      setMessage('Magic link sent! Check your email and click the link to log in directly.')
       return
     }
 
@@ -59,16 +85,26 @@ export default function AuthForm({ onAuthenticated, recovery = false, theme, onT
         <div className="auth-mark" aria-hidden="true" />
         <p className="eyebrow">Personal spending</p>
         <h1>
-          {recovery ? 'Choose a new password' : mode === 'sign-in' ? 'Welcome back' : mode === 'reset' ? 'Reset your password' : 'Create your account'}
+          {recovery
+            ? 'Choose a new password'
+            : mode === 'sign-in'
+              ? 'Welcome back'
+              : mode === 'magic-link'
+                ? 'Sign in with Magic Link'
+                : mode === 'reset'
+                  ? 'Reset your password'
+                  : 'Create your account'}
         </h1>
         <p className="auth-copy">
           {recovery
             ? 'Choose a new password for your Khaata account.'
             : mode === 'sign-in'
-            ? 'Sign in to access your expenses from any device.'
-            : mode === 'reset'
-              ? 'Enter your email and we will send you a reset link.'
-            : 'Create an account to keep your tracker synced everywhere.'}
+              ? 'Sign in to access your expenses from any device.'
+              : mode === 'magic-link'
+                ? 'We will email you a secure login link with no password required.'
+                : mode === 'reset'
+                  ? 'Enter your email and we will send you a password reset link.'
+                  : 'Create an account to keep your tracker synced everywhere.'}
         </p>
 
         <form className="auth-form" aria-busy={busy} onSubmit={handleSubmit}>
@@ -82,7 +118,7 @@ export default function AuthForm({ onAuthenticated, recovery = false, theme, onT
               required
             />
           </label>
-          {mode !== 'reset' || recovery ? (
+          {(mode !== 'reset' && mode !== 'magic-link') || recovery ? (
             <label className="field">
               <span>Password</span>
               <input
@@ -104,31 +140,70 @@ export default function AuthForm({ onAuthenticated, recovery = false, theme, onT
                 ? 'Update password'
                 : mode === 'sign-in'
                   ? 'Sign in'
-                  : mode === 'reset'
-                    ? 'Send reset email'
-                    : 'Create account'}
+                  : mode === 'magic-link'
+                    ? 'Send magic link'
+                    : mode === 'reset'
+                      ? 'Send reset email'
+                      : 'Create account'}
           </button>
         </form>
 
         {!recovery ? (
-          <>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '1.25rem' }}>
             <button
               type="button"
               className="text-btn auth-switch"
+              style={{ margin: '0 auto' }}
               onClick={() => {
                 setMode(mode === 'sign-in' ? 'sign-up' : 'sign-in')
                 setError('')
                 setMessage('')
               }}
             >
-              {mode === 'sign-in' ? 'Create a new account' : 'I already have an account'}
+              {mode === 'sign-in' ? 'Create a new account' : 'Back to sign in'}
             </button>
             {mode === 'sign-in' ? (
-              <button type="button" className="text-btn auth-switch" onClick={() => setMode('reset')}>
-                Forgot password?
+              <>
+                <button
+                  type="button"
+                  className="text-btn auth-switch"
+                  style={{ margin: '0 auto' }}
+                  onClick={() => {
+                    setMode('magic-link')
+                    setError('')
+                    setMessage('')
+                  }}
+                >
+                  Sign in with Magic Link (Passwordless)
+                </button>
+                <button
+                  type="button"
+                  className="text-btn auth-switch"
+                  style={{ margin: '0 auto' }}
+                  onClick={() => {
+                    setMode('reset')
+                    setError('')
+                    setMessage('')
+                  }}
+                >
+                  Forgot password?
+                </button>
+              </>
+            ) : mode === 'magic-link' || mode === 'reset' ? (
+              <button
+                type="button"
+                className="text-btn auth-switch"
+                style={{ margin: '0 auto' }}
+                onClick={() => {
+                  setMode('sign-in')
+                  setError('')
+                  setMessage('')
+                }}
+              >
+                Back to standard sign in
               </button>
             ) : null}
-          </>
+          </div>
         ) : null}
       </section>
     </main>

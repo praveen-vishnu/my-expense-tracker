@@ -12,7 +12,7 @@ import Review from './pages/Review.jsx'
 import Settings from './pages/Settings.jsx'
 import AuthForm from './components/AuthForm.jsx'
 import ThemeToggle from './components/ThemeToggle.jsx'
-import { IconCamera } from '@tabler/icons-react'
+import { IconCamera, IconFileSpreadsheet, IconPlus } from '@tabler/icons-react'
 import { monthSummary, calculateAccountBalances } from './utils/calculations.js'
 import { currentMonthKey, formatINR, relativeDateLabel, shiftMonth } from './utils/formatting.js'
 import { isSupabaseConfigured } from './utils/supabase.js'
@@ -169,23 +169,29 @@ export default function App() {
     return <div className="loading-state" role="status" aria-live="polite">Checking your account...</div>
   }
 
-  if (isSupabaseConfigured && !authUser) {
-    return (
-      <AuthForm
-        theme={theme}
-        onToggleTheme={toggleTheme}
-        onAuthenticated={setAuthUser}
-      />
-    )
-  }
-
   if (passwordRecovery) {
     return (
       <AuthForm
         recovery
         theme={theme}
         onToggleTheme={toggleTheme}
-        onAuthenticated={() => setPasswordRecovery(false)}
+        onAuthenticated={() => {
+          setPasswordRecovery(false)
+          // Clean recovery hash from URL if present
+          if (typeof window !== 'undefined' && window.location.hash) {
+            window.history.replaceState(null, '', window.location.pathname)
+          }
+        }}
+      />
+    )
+  }
+
+  if (isSupabaseConfigured && !authUser) {
+    return (
+      <AuthForm
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        onAuthenticated={setAuthUser}
       />
     )
   }
@@ -218,22 +224,32 @@ export default function App() {
           <ThemeToggle theme={theme} onToggle={toggleTheme} />
           <button
             type="button"
-            className="btn btn-secondary import-desktop-btn"
+            className="btn btn-secondary topbar-btn"
             onClick={() => setScanReceiptModal(true)}
-            title="Scan receipt or bill with Gemini AI"
+            title="Scan receipt or UPI screenshot with AI"
+            aria-label="Scan receipt with AI"
           >
-            <IconCamera size={16} /> Scan Receipt
+            <IconCamera size={16} />
+            <span className="btn-label-desktop">Scan</span>
           </button>
           <button
             type="button"
-            className="btn btn-secondary import-desktop-btn"
+            className="btn btn-secondary topbar-btn"
             onClick={() => setStatementModal(true)}
             title="Import bank statement (CSV)"
+            aria-label="Import CSV statement"
           >
-            Import CSV
+            <IconFileSpreadsheet size={16} />
+            <span className="btn-label-desktop">Import</span>
           </button>
-          <button type="button" className="btn btn-primary add-desktop" onClick={handleOpenAddExpense}>
-            + Add Expense
+          <button
+            type="button"
+            className="btn btn-primary add-desktop"
+            onClick={handleOpenAddExpense}
+            title="Add a new expense"
+          >
+            <IconPlus size={16} />
+            <span>Add</span>
           </button>
         </div>
       </header>

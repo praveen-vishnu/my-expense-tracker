@@ -15,6 +15,22 @@ export function useAuth() {
 
     let active = true
 
+    // Check if user landed from a Supabase recovery email link
+    if (typeof window !== 'undefined') {
+      const hash = window.location.hash || ''
+      const search = window.location.search || ''
+      if (
+        hash.includes('type=recovery') ||
+        search.includes('type=recovery') ||
+        hash.includes('error=') ||
+        search.includes('error=')
+      ) {
+        if (hash.includes('type=recovery') || search.includes('type=recovery')) {
+          setPasswordRecovery(true)
+        }
+      }
+    }
+
     supabase.auth.getSession().then(({ data: sessionData }) => {
       if (!active) return
       const user = sessionData.session?.user
@@ -29,7 +45,9 @@ export function useAuth() {
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (!active) return
-      if (event === 'PASSWORD_RECOVERY') setPasswordRecovery(true)
+      if (event === 'PASSWORD_RECOVERY') {
+        setPasswordRecovery(true)
+      }
       setAuthUser(session?.user?.is_anonymous ? null : session?.user || null)
     })
 
