@@ -225,16 +225,6 @@ export default function App() {
           <button
             type="button"
             className="btn btn-secondary topbar-btn"
-            onClick={() => setScanReceiptModal(true)}
-            title="Scan receipt or UPI screenshot with AI"
-            aria-label="Scan receipt with AI"
-          >
-            <IconCamera size={16} />
-            <span className="btn-label-desktop">Scan</span>
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary topbar-btn"
             onClick={() => setStatementModal(true)}
             title="Import bank statement (CSV)"
             aria-label="Import CSV statement"
@@ -280,7 +270,6 @@ export default function App() {
             onEditIncome={handleOpenAddIncome}
             onDeleteIncome={handlePromptDeleteIncome}
             onOpenCategoryBudgets={() => setCategoryBudgetModal(true)}
-            onScanReceipt={() => setScanReceiptModal(true)}
           />
         ) : null}
 

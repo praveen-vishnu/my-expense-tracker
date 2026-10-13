@@ -288,22 +288,9 @@ export default function Dashboard({
             <section className="panel recent-panel">
               <div className="panel-head">
                 <h2>Recent expenses</h2>
-                <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
-                  {onScanReceipt ? (
-                    <button
-                      type="button"
-                      className="text-btn"
-                      onClick={onScanReceipt}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.85rem' }}
-                    >
-                      <IconCamera size={15} />
-                      <span>Scan Bill</span>
-                    </button>
-                  ) : null}
-                  <button type="button" className="text-btn" onClick={onAddExpense}>
-                    + Add Expense
-                  </button>
-                </div>
+                <button type="button" className="text-btn" onClick={onAddExpense}>
+                  + Add Expense
+                </button>
               </div>
               <ExpenseList
                 groups={recentItems}
