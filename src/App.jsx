@@ -6,6 +6,8 @@ import ConfirmDialog from './components/ConfirmDialog.jsx'
 import StatementImportModal from './components/StatementImportModal.jsx'
 import CategoryBudgetModal from './components/CategoryBudgetModal.jsx'
 import ReceiptScannerModal from './components/ReceiptScannerModal.jsx'
+import TransferModal from './components/TransferModal.jsx'
+import AccountDetailModal from './components/AccountDetailModal.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import History from './pages/History.jsx'
 import Review from './pages/Review.jsx'
@@ -37,6 +39,8 @@ export default function App() {
   const [statementModal, setStatementModal] = useState(false)
   const [categoryBudgetModal, setCategoryBudgetModal] = useState(false)
   const [scanReceiptModal, setScanReceiptModal] = useState(false)
+  const [selectedAccountDetail, setSelectedAccountDetail] = useState(null)
+  const [transferModal, setTransferModal] = useState(null)
   const [confirm, setConfirm] = useState(null)
 
   const {
@@ -59,6 +63,8 @@ export default function App() {
     addAccount,
     deleteAccount,
     setDefaultAccount,
+    saveTransfer,
+    deleteTransfer,
     importData,
     clearAllData,
   } = useTrackerData(authReady, authUser, month)
@@ -67,8 +73,8 @@ export default function App() {
   const prevMonth = useMemo(() => shiftMonth(month, -1), [month])
   const previousSummary = useMemo(() => monthSummary(data, prevMonth), [data, prevMonth])
   const accountBalances = useMemo(
-    () => calculateAccountBalances(data.accounts, data.expenses),
-    [data.accounts, data.expenses]
+    () => calculateAccountBalances(data.accounts, data.expenses, data.transfers, data.income, data.incomeAccounts),
+    [data.accounts, data.expenses, data.transfers, data.income, data.incomeAccounts]
   )
   const categoryTotalsMap = useMemo(() => {
     const map = {}
@@ -156,8 +162,8 @@ export default function App() {
     }
   }, [expenseForm, upsertExpense])
 
-  const handleSaveIncome = useCallback((amount) => {
-    saveIncome(month, amount)
+  const handleSaveIncome = useCallback((amount, accountId) => {
+    saveIncome(month, amount, accountId)
     setIncomeForm(false)
   }, [month, saveIncome])
 
@@ -270,6 +276,14 @@ export default function App() {
             onEditIncome={handleOpenAddIncome}
             onDeleteIncome={handlePromptDeleteIncome}
             onOpenCategoryBudgets={() => setCategoryBudgetModal(true)}
+            onOpenAccountDetail={(acc) => setSelectedAccountDetail(acc)}
+            onOpenTransfer={(fromId, toId, amt) =>
+              setTransferModal({
+                fromAccountId: fromId || '',
+                toAccountId: toId || '',
+                amount: amt || '',
+              })
+            }
           />
         ) : null}
 
@@ -334,8 +348,45 @@ export default function App() {
         <IncomeForm
           month={month}
           initialAmount={summary.income}
+          accounts={data.accounts || []}
+          initialAccountId={data.incomeAccounts?.[month]}
           onCancel={() => setIncomeForm(false)}
           onSave={handleSaveIncome}
+        />
+      ) : null}
+
+      {selectedAccountDetail ? (
+        <AccountDetailModal
+          account={accountBalances.accounts.find((a) => a.id === selectedAccountDetail.id) || selectedAccountDetail}
+          allAccounts={data.accounts || []}
+          expenses={data.expenses}
+          transfers={data.transfers || []}
+          income={data.income}
+          incomeAccounts={data.incomeAccounts || {}}
+          activeMonth={month}
+          onOpenTransfer={(fromId, toId, amt) => {
+            setTransferModal({
+              fromAccountId: fromId || '',
+              toAccountId: toId || '',
+              amount: amt || '',
+            })
+          }}
+          onClose={() => setSelectedAccountDetail(null)}
+        />
+      ) : null}
+
+      {transferModal ? (
+        <TransferModal
+          accounts={data.accounts || []}
+          accountBalances={accountBalances}
+          initialFromAccountId={transferModal.fromAccountId}
+          initialToAccountId={transferModal.toAccountId}
+          initialAmount={transferModal.amount}
+          onSaveTransfer={(transfer) => {
+            saveTransfer(transfer)
+            setTransferModal(null)
+          }}
+          onCancel={() => setTransferModal(null)}
         />
       ) : null}
 

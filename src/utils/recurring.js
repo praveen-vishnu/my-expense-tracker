@@ -29,6 +29,7 @@ export function addRecurringExpenses(data, month) {
       category: schedule.category,
       date: `${month}-${pad2(day)}`,
       note: schedule.note,
+      ...(schedule.accountId ? { accountId: schedule.accountId } : {}),
     })
   }
 

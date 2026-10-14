@@ -15,11 +15,13 @@ export function emptyData() {
   return {
     version: DATA_VERSION,
     income: {},
+    incomeAccounts: {},
     budgets: {},
     categoryBudgets: {},
     recurringExpenses: [],
     expenses: [],
     accounts: defaultStarterAccounts(),
+    transfers: [],
     categories: [],
   }
 }
@@ -37,6 +39,14 @@ function normalizeAccounts(accounts) {
       type: validTypes.has(a.type) ? a.type : 'bank',
       initialBalance: Number.isFinite(Number(a.initialBalance)) ? Number(a.initialBalance) : 0,
       creditLimit: a.type === 'credit_card' && Number.isFinite(Number(a.creditLimit)) ? Number(a.creditLimit) : null,
+      billingDay:
+        a.type === 'credit_card' && Number.isInteger(Number(a.billingDay)) && Number(a.billingDay) >= 1 && Number(a.billingDay) <= 31
+          ? Number(a.billingDay)
+          : null,
+      dueDay:
+        a.type === 'credit_card' && Number.isInteger(Number(a.dueDay)) && Number(a.dueDay) >= 1 && Number(a.dueDay) <= 31
+          ? Number(a.dueDay)
+          : null,
       isDefault: Boolean(a.isDefault),
     }))
 
@@ -147,6 +157,46 @@ function normalizeRecurringExpenses(recurringExpenses) {
       startMonth: schedule.startMonth,
       kind: schedule.kind,
       installments: schedule.kind === 'emi' ? schedule.installments : null,
+      accountId: typeof schedule.accountId === 'string' && schedule.accountId ? schedule.accountId : null,
+    }))
+}
+
+function normalizeIncomeAccounts(incomeAccounts) {
+  if (!incomeAccounts || typeof incomeAccounts !== 'object' || Array.isArray(incomeAccounts)) return {}
+  const next = {}
+  for (const [month, accId] of Object.entries(incomeAccounts)) {
+    if (!isValidMonthKey(month)) continue
+    if (typeof accId === 'string' && accId.trim()) {
+      next[month] = accId.trim()
+    }
+  }
+  return next
+}
+
+function normalizeTransfers(transfers) {
+  if (!Array.isArray(transfers)) return []
+  return transfers
+    .filter((t) => (
+      t &&
+      typeof t.id === 'string' &&
+      t.id &&
+      typeof t.fromAccountId === 'string' &&
+      t.fromAccountId &&
+      typeof t.toAccountId === 'string' &&
+      t.toAccountId &&
+      typeof t.amount === 'number' &&
+      Number.isFinite(t.amount) &&
+      t.amount > 0 &&
+      typeof t.date === 'string' &&
+      isValidDate(t.date)
+    ))
+    .map((t) => ({
+      id: t.id,
+      fromAccountId: t.fromAccountId,
+      toAccountId: t.toAccountId,
+      amount: t.amount,
+      date: t.date,
+      note: typeof t.note === 'string' ? t.note.trim() : '',
     }))
 }
 
@@ -168,11 +218,13 @@ export function normalizeData(raw) {
   return {
     version: DATA_VERSION,
     income: normalizeIncome(raw.income),
+    incomeAccounts: normalizeIncomeAccounts(raw.incomeAccounts),
     budgets: normalizeBudgets(raw.budgets),
     categoryBudgets: normalizeCategoryBudgets(raw.categoryBudgets),
     recurringExpenses: normalizeRecurringExpenses(raw.recurringExpenses),
     expenses,
     accounts: normalizeAccounts(raw.accounts),
+    transfers: normalizeTransfers(raw.transfers),
     categories: normalizeCategories(raw.categories),
   }
 }

@@ -37,12 +37,15 @@ export default function Settings({
   const [scheduleDay, setScheduleDay] = useState('1')
   const [scheduleKind, setScheduleKind] = useState('monthly')
   const [scheduleInstallments, setScheduleInstallments] = useState('')
+  const [scheduleAccountId, setScheduleAccountId] = useState(() => data.accounts?.find((a) => a.isDefault)?.id || '')
 
   // Account form state
   const [accName, setAccName] = useState('')
   const [accType, setAccType] = useState('bank')
   const [accBalance, setAccBalance] = useState('')
   const [accLimit, setAccLimit] = useState('')
+  const [accBillingDay, setAccBillingDay] = useState('')
+  const [accDueDay, setAccDueDay] = useState('')
 
   // Gemini API key state
   const [geminiKey, setGeminiKey] = useState(() => getStoredGeminiKey())
@@ -122,6 +125,19 @@ export default function Settings({
 
     const initialBalance = parseAmount(accBalance) || 0
     const creditLimit = accType === 'credit_card' ? parseAmount(accLimit) || null : null
+    const billingDay = accType === 'credit_card' && accBillingDay ? Number(accBillingDay) : null
+    const dueDay = accType === 'credit_card' && accDueDay ? Number(accDueDay) : null
+
+    if (accType === 'credit_card') {
+      if (billingDay != null && (!Number.isInteger(billingDay) || billingDay < 1 || billingDay > 31)) {
+        reportError('account', 'Billing cycle day must be between 1 and 31.', 'billingDay')
+        return
+      }
+      if (dueDay != null && (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31)) {
+        reportError('account', 'Payment due day must be between 1 and 31.', 'dueDay')
+        return
+      }
+    }
 
     onAddAccount({
       id: createId(),
@@ -129,12 +145,16 @@ export default function Settings({
       type: accType,
       initialBalance,
       creditLimit,
+      billingDay,
+      dueDay,
       isDefault: !(data.accounts || []).length,
     })
 
     setAccName('')
     setAccBalance('')
     setAccLimit('')
+    setAccBillingDay('')
+    setAccDueDay('')
     reportMessage('account', `Added account: ${name}.`)
   }
 
@@ -190,6 +210,7 @@ export default function Settings({
       startMonth: month,
       kind: scheduleKind,
       installments: scheduleKind === 'emi' ? installments : null,
+      accountId: scheduleAccountId || null,
     })
     setScheduleName('')
     setScheduleAmount('')
@@ -235,7 +256,7 @@ export default function Settings({
                   {acc.isDefault ? <span className="default-pill">Default</span> : null}
                   <small className="muted">
                     {acc.type === 'credit_card'
-                      ? acc.creditLimit ? `Limit: ${formatINR(acc.creditLimit)}` : 'No credit limit set'
+                      ? `${acc.creditLimit ? `Limit: ${formatINR(acc.creditLimit)}` : 'No credit limit set'}${acc.billingDay ? ` · Bill: ${acc.billingDay}th` : ''}${acc.dueDay ? ` · Due: ${acc.dueDay}th` : ''}`
                       : `Starting: ${formatINR(acc.initialBalance)}`}
                   </small>
                 </div>
@@ -305,6 +326,33 @@ export default function Settings({
             </div>
           </label>
 
+          {accType === 'credit_card' ? (
+            <>
+              <label className="field">
+                <span>Billing cycle day</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="31"
+                  value={accBillingDay}
+                  onChange={(event) => setAccBillingDay(event.target.value)}
+                  placeholder="e.g. 15"
+                />
+              </label>
+              <label className="field">
+                <span>Payment due day</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="31"
+                  value={accDueDay}
+                  onChange={(event) => setAccDueDay(event.target.value)}
+                  placeholder="e.g. 5"
+                />
+              </label>
+            </>
+          ) : null}
+
           <button type="submit" className="btn btn-secondary">
             Add account
           </button>
@@ -356,8 +404,8 @@ export default function Settings({
 
       <section className="panel stack">
         <div>
-          <h2>Recurring expenses</h2>
-          <p className="muted">Automatically add monthly bills or EMIs from {formatMonthLabel(month)}.</p>
+          <h2>Recurring expenses & EMIs</h2>
+          <p className="muted">Automatically add monthly bills or EMIs and deduct from accounts in {formatMonthLabel(month)}.</p>
         </div>
         <form className="recurring-form" noValidate onSubmit={handleRecurringSubmit}>
           <label className="field">
@@ -373,6 +421,20 @@ export default function Settings({
             <select ref={(element) => { scheduleFields.current.category = element }} value={scheduleCategory} required aria-invalid={feedback.section === 'schedule' && feedback.field === 'category'} aria-describedby={feedback.section === 'schedule' && feedback.field === 'category' ? 'schedule-error' : undefined} onChange={(event) => setScheduleCategory(event.target.value)}>
               <option value="">Choose a category</option>
               {data.categories.map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
+          </label>
+          <label className="field">
+            <span>Deduct from account</span>
+            <select
+              value={scheduleAccountId}
+              onChange={(event) => setScheduleAccountId(event.target.value)}
+            >
+              <option value="">Unassigned (No account deduction)</option>
+              {data.accounts?.map((acc) => (
+                <option key={acc.id} value={acc.id}>
+                  {acc.name} ({acc.type === 'credit_card' ? 'Credit Card' : acc.type === 'bank' ? 'Bank' : acc.type === 'wallet' ? 'Wallet' : 'Cash'})
+                </option>
+              ))}
             </select>
           </label>
           <label className="field">
@@ -398,12 +460,24 @@ export default function Settings({
         {feedback.section === 'schedule' && feedback.message ? <p className="form-ok" role="status" aria-live="polite">{feedback.message}</p> : null}
         {data.recurringExpenses.length ? (
           <ul className="schedule-list">
-            {data.recurringExpenses.map((schedule) => (
-              <li key={schedule.id}>
-                <span><strong>{schedule.name}</strong><small>{schedule.kind === 'emi' ? `EMI · ${schedule.installments} installments` : 'Monthly'} · Day {schedule.day}</small></span>
-                <span className="schedule-actions"><strong className="money">{formatINR(schedule.amount)}</strong><button type="button" className="text-btn danger" aria-label={`Remove recurring schedule: ${schedule.name}`} onClick={() => onDeleteRecurring(schedule)}>Remove</button></span>
-              </li>
-            ))}
+            {data.recurringExpenses.map((schedule) => {
+              const account = data.accounts?.find((a) => a.id === schedule.accountId)
+              return (
+                <li key={schedule.id}>
+                  <span>
+                    <strong>{schedule.name}</strong>
+                    <small>
+                      {schedule.kind === 'emi' ? `EMI · ${schedule.installments} installments` : 'Monthly'} · Day {schedule.day}
+                      {account ? ` · Deducts from ${account.name}` : ''}
+                    </small>
+                  </span>
+                  <span className="schedule-actions">
+                    <strong className="money">{formatINR(schedule.amount)}</strong>
+                    <button type="button" className="text-btn danger" aria-label={`Remove recurring schedule: ${schedule.name}`} onClick={() => onDeleteRecurring(schedule)}>Remove</button>
+                  </span>
+                </li>
+              )
+            })}
           </ul>
         ) : <p className="muted">No recurring schedules yet.</p>}
       </section>

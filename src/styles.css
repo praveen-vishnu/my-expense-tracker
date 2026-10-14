@@ -3414,6 +3414,379 @@ h2 {
   border-color: rgba(255, 255, 255, 0.08);
 }
 
+/* ==========================================================================
+   MILESTONE A 2.0: ENHANCED ACCOUNTS, DUE BADGES, UTILIZATION & TRANSFERS
+   ========================================================================== */
+
+.accounts-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.account-chip.interactive {
+  cursor: pointer;
+  user-select: none;
+  border: 1px solid rgba(122, 127, 123, 0.2);
+}
+
+.account-chip.interactive:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(31, 42, 39, 0.09);
+  border-color: rgba(24, 111, 98, 0.35);
+}
+
+.account-chip.interactive:focus-visible {
+  outline: 2px solid var(--accent, #186f62);
+  outline-offset: 2px;
+}
+
+.acc-sub-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.due-badge {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(122, 127, 123, 0.12);
+  color: var(--muted);
+}
+
+.due-badge.due-urgent,
+.due-warning-pill {
+  background: rgba(225, 29, 72, 0.12);
+  color: #e11d48;
+  font-weight: 600;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+}
+
+.chip-util-tag {
+  font-weight: 600;
+}
+
+.chip-util-tag.util-good {
+  color: #16a34a;
+}
+
+.chip-util-tag.util-moderate {
+  color: #d97706;
+}
+
+.chip-util-tag.util-high {
+  color: #e11d48;
+}
+
+/* TRANSFER MODAL */
+.transfer-accounts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+@media (max-width: 540px) {
+  .transfer-accounts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.field-hint {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.transfer-quick-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.55rem 0.75rem;
+  background: rgba(24, 111, 98, 0.08);
+  border: 1px solid rgba(24, 111, 98, 0.2);
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+/* ACCOUNT DETAIL VIEW */
+.account-detail-view {
+  display: grid;
+  gap: 1.1rem;
+}
+
+.acc-detail-head-info {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.acc-type-icon-large {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: rgba(24, 111, 98, 0.12);
+  color: var(--accent, #186f62);
+  flex-shrink: 0;
+}
+
+.acc-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.acc-title-row h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.acc-detail-card {
+  display: grid;
+  gap: 1rem;
+  padding: 1.2rem;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+
+.acc-hero-stat {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.acc-stat-sub {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.acc-hero-amount {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.acc-hero-amount.negative {
+  color: #e11d48;
+}
+
+.acc-hero-amount.positive {
+  color: #16a34a;
+}
+
+.acc-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.acc-metric-item {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.acc-metric-item span {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.acc-metric-item strong {
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* CREDIT UTILIZATION SECTION */
+.credit-util-section {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.8rem;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px solid var(--line);
+}
+
+.util-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.8rem;
+}
+
+.util-badge {
+  font-weight: 600;
+  font-size: 0.76rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+}
+
+.util-badge.util-good {
+  background: rgba(22, 163, 74, 0.12);
+  color: #16a34a;
+}
+
+.util-badge.util-moderate {
+  background: rgba(217, 119, 6, 0.12);
+  color: #d97706;
+}
+
+.util-badge.util-high {
+  background: rgba(225, 29, 72, 0.12);
+  color: #e11d48;
+}
+
+.bar-fill-on-track {
+  background: linear-gradient(90deg, #16a34a, #22c55e);
+}
+
+.acc-actions-row {
+  margin-top: 0.25rem;
+}
+
+/* ACCOUNT ACTIVITY LEDGER */
+.acc-ledger-section {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.ledger-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ledger-head h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.ledger-filter-pills {
+  display: flex;
+  gap: 0.35rem;
+  background: rgba(122, 127, 123, 0.12);
+  padding: 0.2rem;
+  border-radius: 999px;
+}
+
+.filter-pill {
+  border: 0;
+  background: transparent;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 999px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+
+.filter-pill.active {
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.ledger-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.5rem;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.ledger-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 0.85rem;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.ledger-title-line {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ledger-title-line strong {
+  font-size: 0.9rem;
+}
+
+.ledger-date {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.ledger-amount {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.ledger-amount.positive {
+  color: #16a34a;
+}
+
+.ledger-amount.negative {
+  color: var(--ink);
+}
+
+.ledger-empty {
+  padding: 1.5rem;
+  text-align: center;
+}
+
+/* DARK MODE OVERRIDES */
+:root[data-theme='dark'] .acc-detail-card {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+:root[data-theme='dark'] .acc-type-icon-large {
+  background: rgba(157, 219, 193, 0.15);
+  color: #9ddbc1;
+}
+
+:root[data-theme='dark'] .credit-util-section {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme='dark'] .ledger-item {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme='dark'] .filter-pill.active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+:root[data-theme='dark'] .transfer-quick-action {
+  background: rgba(157, 219, 193, 0.08);
+  border-color: rgba(157, 219, 193, 0.2);
+}
+
+
 
 
 

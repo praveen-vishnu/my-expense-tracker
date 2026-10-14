@@ -14,6 +14,8 @@ export default function Dashboard({
   onDeleteIncome,
   onOpenCategoryBudgets,
   onScanReceipt,
+  onOpenAccountDetail,
+  onOpenTransfer,
 }) {
   const maxCategory = summary.categories[0]?.total || 0
   const recent = groupExpensesByDate(summary.expenses).slice(0, 5)
@@ -248,28 +250,66 @@ export default function Dashboard({
                   <h2>Accounts & Liquidity</h2>
                   <p className="muted">Net liquid worth across accounts</p>
                 </div>
-                <span className="net-worth-badge">
-                  Net: <strong className={`money ${accountBalances.netWorth < 0 ? 'negative' : 'positive'}`}>{formatINR(accountBalances.netWorth)}</strong>
-                </span>
+                <div className="accounts-head-actions">
+                  <span className="net-worth-badge">
+                    Net: <strong className={`money ${accountBalances.netWorth < 0 ? 'negative' : 'positive'}`}>{formatINR(accountBalances.netWorth)}</strong>
+                  </span>
+                  {onOpenTransfer ? (
+                    <button
+                      type="button"
+                      className="text-btn primary"
+                      onClick={() => onOpenTransfer()}
+                      title="Transfer funds or pay credit card bill"
+                    >
+                      ⇄ Transfer / Pay
+                    </button>
+                  ) : null}
+                </div>
               </div>
 
               <div className="accounts-list">
                 {accountBalances.accounts.map((acc) => (
-                  <div key={acc.id} className={`account-chip acc-${acc.type}`}>
+                  <div
+                    key={acc.id}
+                    className={`account-chip acc-${acc.type} interactive`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onOpenAccountDetail && onOpenAccountDetail(acc)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        onOpenAccountDetail && onOpenAccountDetail(acc)
+                      }
+                    }}
+                  >
                     <div className="acc-info">
                       <span className="acc-type-icon">
                         {acc.type === 'credit_card' ? '💳' : acc.type === 'bank' ? '🏦' : acc.type === 'wallet' ? '📱' : '💵'}
                       </span>
                       <div>
                         <strong>{acc.name}</strong>
-                        <small>{acc.type === 'credit_card' ? 'Credit Card' : acc.type === 'bank' ? 'Bank Account' : acc.type === 'wallet' ? 'Wallet' : 'Cash'}</small>
+                        <div className="acc-sub-row">
+                          <small>{acc.type === 'credit_card' ? 'Credit Card' : acc.type === 'bank' ? 'Bank Account' : acc.type === 'wallet' ? 'Wallet' : 'Cash'}</small>
+                          {acc.dueInfo?.label ? (
+                            <span className={`due-badge ${acc.dueInfo.isDueSoon ? 'due-urgent' : ''}`}>
+                              {acc.dueInfo.label}
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
                     <div className="acc-balance">
                       {acc.type === 'credit_card' ? (
                         <>
                           <strong className={acc.outstanding > 0 ? 'money spent' : 'money'}>{formatINR(acc.outstanding)}</strong>
-                          <small>outstanding{acc.availableCredit != null ? ` · ${formatINR(acc.availableCredit)} limit left` : ''}</small>
+                          <small>
+                            outstanding
+                            {acc.utilizationPercent != null ? (
+                              <span className={`chip-util-tag util-${acc.utilizationStatus}`}>
+                                {' '}({Math.round(acc.utilizationPercent)}%)
+                              </span>
+                            ) : null}
+                          </small>
                         </>
                       ) : (
                         <>

@@ -181,3 +181,57 @@ test('monthSummary calculates category budget consumption, remaining, and alert 
   assert.equal(summary.categoryAlerts.length, 2) // Food (exceeded) + Groceries (warning)
 })
 
+test('calculateAccountBalances incorporates income tagging, transfers, CC bill settlement, and utilization', () => {
+  const accounts = [
+    { id: 'acc_bank', name: 'HDFC Bank', type: 'bank', initialBalance: 50000 },
+    { id: 'acc_cc', name: 'Infinia Card', type: 'credit_card', initialBalance: 0, creditLimit: 200000, dueDay: 20, billingDay: 5 },
+    { id: 'acc_cash', name: 'Cash Wallet', type: 'cash', initialBalance: 2000 },
+  ]
+
+  const income = { '2026-10': 100000 }
+  const incomeAccounts = { '2026-10': 'acc_bank' } // 100k deposited into HDFC
+
+  const expenses = [
+    { id: 'e1', amount: 20000, accountId: 'acc_bank' }, // General bank spend
+    { id: 'e2', amount: 30000, accountId: 'acc_bank' }, // EMI loan payment deducted from bank
+    { id: 'e3', amount: 40000, accountId: 'acc_cc' },   // Credit card spend
+    { id: 'e4', amount: 500, accountId: 'acc_cash' },   // Cash spend
+  ]
+
+  // Transfer 1: Pay 25000 CC bill from HDFC Bank to Infinia Card
+  // Transfer 2: ATM cash withdrawal of 5000 from HDFC Bank to Cash Wallet
+  const transfers = [
+    { id: 't1', fromAccountId: 'acc_bank', toAccountId: 'acc_cc', amount: 25000, date: '2026-10-10' },
+    { id: 't2', fromAccountId: 'acc_bank', toAccountId: 'acc_cash', amount: 5000, date: '2026-10-12' },
+  ]
+
+  const result = calculateAccountBalances(accounts, expenses, transfers, income, incomeAccounts)
+
+  // HDFC Bank: 50,000 (init) + 100,000 (income) - 50,000 (spent) - 25,000 (CC pay) - 5,000 (ATM) = 70,000
+  const bank = result.accounts.find((a) => a.id === 'acc_bank')
+  assert.equal(bank.currentBalance, 70000)
+
+  // Cash: 2,000 (init) - 500 (spent) + 5,000 (ATM transfer in) = 6,500
+  const cash = result.accounts.find((a) => a.id === 'acc_cash')
+  assert.equal(cash.currentBalance, 6500)
+
+  // Total Liquid = 70,000 + 6,500 = 76,500
+  assert.equal(result.totalLiquid, 76500)
+
+  // Infinia Card: 40,000 (spent) - 25,000 (bill paid) = 15,000 outstanding
+  const cc = result.accounts.find((a) => a.id === 'acc_cc')
+  assert.equal(cc.outstanding, 15000)
+  assert.equal(cc.currentBalance, -15000)
+  assert.equal(cc.availableCredit, 185000)
+  assert.equal(cc.utilizationPercent, 7.5) // (15000 / 200000) * 100
+  assert.equal(cc.utilizationStatus, 'good')
+
+  // Due info
+  assert.ok(cc.dueInfo)
+  assert.equal(cc.dueInfo.dueDay, 20)
+
+  // Total credit outstanding & net worth: 76,500 - 15,000 = 61,500
+  assert.equal(result.totalCreditOutstanding, 15000)
+  assert.equal(result.netWorth, 61500)
+})
+

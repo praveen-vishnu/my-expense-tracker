@@ -165,7 +165,47 @@ export function monthSummary(data, monthKey, now = new Date()) {
   }
 }
 
-export function calculateAccountBalances(accounts = [], expenses = []) {
+export function getCreditCardDueInfo(card, now = new Date()) {
+  if (!card || card.type !== 'credit_card' || !card.dueDay) {
+    return null
+  }
+  const currentDay = now.getDate()
+  const dueDay = card.dueDay
+  const daysInCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+
+  const daysUntil = dueDay - currentDay
+  let isDueSoon = false
+  let label = ''
+
+  if (daysUntil === 0) {
+    isDueSoon = true
+    label = 'Due today'
+  } else if (daysUntil > 0 && daysUntil <= 7) {
+    isDueSoon = true
+    label = `Due in ${daysUntil} ${daysUntil === 1 ? 'day' : 'days'}`
+  } else if (daysUntil > 7) {
+    label = `Due in ${daysUntil} days`
+  } else {
+    const daysUntilNext = (daysInCurrentMonth - currentDay) + dueDay
+    label = `Due in ${daysUntilNext} days`
+  }
+
+  return {
+    dueDay,
+    billingDay: card.billingDay || null,
+    isDueSoon,
+    daysUntil: daysUntil >= 0 ? daysUntil : (daysInCurrentMonth - currentDay) + dueDay,
+    label,
+  }
+}
+
+export function calculateAccountBalances(
+  accounts = [],
+  expenses = [],
+  transfers = [],
+  income = {},
+  incomeAccounts = {}
+) {
   const spentByAccount = new Map()
   let unassignedSpent = 0
 
@@ -177,6 +217,29 @@ export function calculateAccountBalances(accounts = [], expenses = []) {
     }
   }
 
+  const incomeDepositedByAccount = new Map()
+  if (income && incomeAccounts) {
+    for (const [month, accId] of Object.entries(incomeAccounts)) {
+      const amt = Number(income[month])
+      if (accId && Number.isFinite(amt) && amt > 0) {
+        incomeDepositedByAccount.set(accId, (incomeDepositedByAccount.get(accId) || 0) + amt)
+      }
+    }
+  }
+
+  const transfersOutByAccount = new Map()
+  const transfersInByAccount = new Map()
+  if (Array.isArray(transfers)) {
+    for (const tr of transfers) {
+      if (tr.fromAccountId) {
+        transfersOutByAccount.set(tr.fromAccountId, (transfersOutByAccount.get(tr.fromAccountId) || 0) + tr.amount)
+      }
+      if (tr.toAccountId) {
+        transfersInByAccount.set(tr.toAccountId, (transfersInByAccount.get(tr.toAccountId) || 0) + tr.amount)
+      }
+    }
+  }
+
   let totalLiquid = 0
   let totalCreditOutstanding = 0
 
@@ -185,16 +248,31 @@ export function calculateAccountBalances(accounts = [], expenses = []) {
     let currentBalance = 0
     let outstanding = 0
     let availableCredit = null
+    let utilizationPercent = null
+    let utilizationStatus = 'good'
 
     if (acc.type === 'credit_card') {
-      outstanding = totalSpent
+      const paymentsReceived = transfersInByAccount.get(acc.id) || 0
+      outstanding = Math.max(totalSpent - paymentsReceived, 0)
       currentBalance = -outstanding
       totalCreditOutstanding += outstanding
+
       if (acc.creditLimit != null) {
         availableCredit = Math.max(acc.creditLimit - outstanding, 0)
+        utilizationPercent = acc.creditLimit > 0 ? (outstanding / acc.creditLimit) * 100 : 0
+        if (utilizationPercent > 50) {
+          utilizationStatus = 'high'
+        } else if (utilizationPercent > 30) {
+          utilizationStatus = 'moderate'
+        } else {
+          utilizationStatus = 'good'
+        }
       }
     } else {
-      currentBalance = acc.initialBalance - totalSpent
+      const incomeDeposited = incomeDepositedByAccount.get(acc.id) || 0
+      const transfersOut = transfersOutByAccount.get(acc.id) || 0
+      const transfersIn = transfersInByAccount.get(acc.id) || 0
+      currentBalance = acc.initialBalance + incomeDeposited - totalSpent - transfersOut + transfersIn
       totalLiquid += currentBalance
     }
 
@@ -204,6 +282,9 @@ export function calculateAccountBalances(accounts = [], expenses = []) {
       currentBalance,
       outstanding,
       availableCredit,
+      utilizationPercent,
+      utilizationStatus,
+      dueInfo: acc.type === 'credit_card' ? getCreditCardDueInfo(acc) : null,
     }
   })
 

@@ -116,18 +116,34 @@ export function useTrackerData(authReady, authUser, month) {
     }))
   }, [])
 
-  const saveIncome = useCallback((monthKey, amount) => {
-    setData((current) => ({
-      ...current,
-      income: { ...current.income, [monthKey]: amount },
-    }))
+  const saveIncome = useCallback((monthKey, amount, accountId = null) => {
+    setData((current) => {
+      const nextIncome = { ...current.income, [monthKey]: amount }
+      const nextIncomeAccounts = { ...(current.incomeAccounts || {}) }
+      if (accountId) {
+        nextIncomeAccounts[monthKey] = accountId
+      } else {
+        delete nextIncomeAccounts[monthKey]
+      }
+      return {
+        ...current,
+        income: nextIncome,
+        incomeAccounts: nextIncomeAccounts,
+      }
+    })
   }, [])
 
   const deleteIncome = useCallback((monthKey) => {
     setData((current) => {
       const next = { ...current.income }
       delete next[monthKey]
-      return { ...current, income: next }
+      const nextIncomeAccounts = { ...(current.incomeAccounts || {}) }
+      delete nextIncomeAccounts[monthKey]
+      return {
+        ...current,
+        income: next,
+        incomeAccounts: nextIncomeAccounts,
+      }
     })
   }, [])
 
@@ -240,8 +256,35 @@ export function useTrackerData(authReady, authUser, month) {
         expenses: current.expenses.map((e) =>
           e.accountId === accountId ? { ...e, accountId: null } : e
         ),
+        recurringExpenses: (current.recurringExpenses || []).map((r) =>
+          r.accountId === accountId ? { ...r, accountId: null } : r
+        ),
+        transfers: (current.transfers || []).filter(
+          (t) => t.fromAccountId !== accountId && t.toAccountId !== accountId
+        ),
+        incomeAccounts: Object.fromEntries(
+          Object.entries(current.incomeAccounts || {}).filter(([_, id]) => id !== accountId)
+        ),
       }
     })
+  }, [])
+
+  const saveTransfer = useCallback((transfer) => {
+    const newTransfer = {
+      id: createId(),
+      ...transfer,
+    }
+    setData((current) => ({
+      ...current,
+      transfers: [newTransfer, ...(current.transfers || [])],
+    }))
+  }, [])
+
+  const deleteTransfer = useCallback((transferId) => {
+    setData((current) => ({
+      ...current,
+      transfers: (current.transfers || []).filter((t) => t.id !== transferId),
+    }))
   }, [])
 
   const setDefaultAccount = useCallback((accountId) => {
@@ -285,6 +328,8 @@ export function useTrackerData(authReady, authUser, month) {
     updateAccount,
     deleteAccount,
     setDefaultAccount,
+    saveTransfer,
+    deleteTransfer,
     importData,
     clearAllData,
   }
