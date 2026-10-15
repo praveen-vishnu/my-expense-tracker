@@ -374,22 +374,82 @@ export function parseBankStatementRows(rows, options = {}) {
     const cleanedNote = cleanNarration(rawNarration)
     const category = predictCategory(rawNarration + ' ' + cleanedNote, availableCategories)
 
-    // Check for duplicate or recurring match against existing expenses
-    // 1. Exact match (same date, same amount, and note/category overlap)
+    // Helper: detect if a note is a generic banking placeholder rather than a specific merchant/payee
+    const isGenericNote = (note) => {
+      if (!note) return true
+      const n = String(note).trim().toLowerCase()
+      return (
+        n === 'expense' ||
+        n === 'debit' ||
+        n === 'payment' ||
+        n === 'bank transfer' ||
+        n === 'upi' ||
+        n === 'nach' ||
+        n === 'ach' ||
+        n === 'other'
+      )
+    }
+
+    // Helper: extract meaningful keywords from a note (length >= 3, alphanumeric)
+    const getMeaningfulWords = (str) => {
+      return String(str || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .split(/\s+/)
+        .filter((w) => w.length >= 3 && !isGenericNote(w))
+    }
+
+    // Helper: evaluate if an existing expense is truly compatible with this statement row
+    const areExpensesCompatible = (exp) => {
+      const expNote = (exp.note || '').trim().toLowerCase()
+      const candNote = (cleanedNote || '').trim().toLowerCase()
+
+      const expWords = getMeaningfulWords(expNote)
+      const candWords = getMeaningfulWords(candNote)
+
+      // Check if notes share any meaningful merchant/payee keyword (e.g. "Bajaj Finance" vs "Bajaj Finance Loan EMI")
+      const noteOverlap = Boolean(
+        (expNote && candNote && (expNote.includes(candNote) || candNote.includes(expNote))) ||
+        (expWords.length && candWords.length && expWords.some((w) =>
+          candWords.some((cw) => w === cw || (w.length > 3 && cw.length > 3 && (w.includes(cw) || cw.includes(w))))
+        ))
+      )
+
+      // If both have specific merchant/payee names that share NO words
+      // (e.g. existing is "SIP" while statement is "Croma" or "Electricity"),
+      // they are strictly different transactions even if the amounts happen to be identical!
+      const hasDistinctContradictoryNotes = (
+        expWords.length > 0 &&
+        candWords.length > 0 &&
+        !noteOverlap
+      )
+
+      if (hasDistinctContradictoryNotes) {
+        return false
+      }
+
+      // Check specific category match (ignoring generic 'Other')
+      const specificCatMatch = Boolean(
+        exp.category &&
+        category &&
+        exp.category.toLowerCase() !== 'other' &&
+        exp.category.toLowerCase() === category.toLowerCase()
+      )
+
+      return noteOverlap || specificCatMatch
+    }
+
+    // 1. Exact match (same date, same amount, and compatible note/category)
     let matchedExpense = existingExpenses.find(
       (exp) =>
         exp.date === isoDate &&
         Math.abs(exp.amount - amount) < 0.01 &&
-        (exp.category?.toLowerCase() === category?.toLowerCase() ||
-          (exp.note && cleanedNote && (
-            exp.note.toLowerCase().includes(cleanedNote.toLowerCase()) ||
-            cleanedNote.toLowerCase().includes(exp.note.toLowerCase())
-          )))
+        areExpensesCompatible(exp)
     )
 
-    // 2. Smart recurring match for EMI, Rent, and Bills
+    // 2. Smart recurring match for EMI, Rent, SIP, and Bills
     // In PennyWise, recurring expenses materialize as recurring_<scheduleId>_<month>
-    // Bank clearing dates for EMIs, rent, or utility bills often vary by +/- 4 days due to weekends/clearing cycles
+    // Bank clearing dates often vary by +/- 4 days due to weekends/clearing cycles
     if (!matchedExpense) {
       matchedExpense = existingExpenses.find((exp) => {
         const isRecurring = Boolean(exp.recurringId || (exp.id && String(exp.id).startsWith('recurring_')))
@@ -407,16 +467,7 @@ export function parseBankStatementRows(rows, options = {}) {
         const dayDiff = Math.abs(curTime - expTime) / (1000 * 3600 * 24)
         if (dayDiff > 4) return false
 
-        // Category matches OR note contains recurring note keyword
-        const catMatches = exp.category?.toLowerCase() === category?.toLowerCase()
-        const noteMatches = Boolean(
-          exp.note && cleanedNote && (
-            exp.note.toLowerCase().includes(cleanedNote.toLowerCase()) ||
-            cleanedNote.toLowerCase().includes(exp.note.toLowerCase())
-          )
-        )
-
-        return catMatches || noteMatches
+        return areExpensesCompatible(exp)
       })
     }
 

@@ -155,3 +155,37 @@ Date,Narration,Withdrawal,Deposit
   assert.equal(result.transactions[2].isDuplicate, false)
   assert.equal(result.transactions[2].selected, true)
 })
+
+test('does not falsely match recurring expense when amount is identical but notes contradict (e.g. SIP vs Croma)', () => {
+  const statementCSV = `
+Date,Narration,Withdrawal,Deposit
+05/10/2026,UPI-CROMA ELECTRONICS-croma@hdfcbank-9988,6050.00,
+`
+
+  const existingExpenses = [
+    {
+      id: 'recurring_sip_2026-10',
+      recurringId: 'sched_sip',
+      date: '2026-10-05',
+      amount: 6050,
+      note: 'SIP - Nippon India Growth Fund',
+      category: 'Investments',
+    },
+  ]
+
+  const result = parseBankStatementCSV(statementCSV, {
+    availableCategories: ['Investments', 'Shopping'],
+    existingExpenses,
+  })
+
+  assert.equal(result.ok, true)
+  assert.equal(result.totalParsed, 1)
+  assert.equal(result.duplicateCount, 0)
+  assert.equal(result.recurringCount, 0)
+
+  const [t1] = result.transactions
+  assert.equal(t1.amount, 6050)
+  assert.equal(t1.isDuplicate, false)
+  assert.equal(t1.isRecurringMatch, false)
+  assert.equal(t1.selected, true) // Selected for import because it is Croma, not SIP!
+})
