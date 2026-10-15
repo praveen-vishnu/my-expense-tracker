@@ -6,7 +6,6 @@ import {
   calculateAccountBalances,
   calculateFinancialHealth,
   sumExpenses,
-  getTodaySpendingAllowance,
   getUpcomingOutflows,
   getCreditCardCycleSpend,
   getPendingSplitReceivables,
@@ -290,27 +289,6 @@ test('split expenses only count user share in budgets and track pending receivab
   assert.equal(receivables.items.length, 1)
   assert.equal(receivables.totalOwed, 2000)
   assert.equal(receivables.items[0].owedBy, 'Rahul & Sneha')
-})
-
-test('getTodaySpendingAllowance calculates daily pocket allowance correctly', () => {
-  const summary = {
-    monthKey: '2026-10',
-    budget: 31000,
-    spent: 10000,
-  }
-  const expenses = [
-    { date: '2026-10-15', amount: 500 }, // spent today
-  ]
-  const mockNow = new Date('2026-10-15T10:00:00Z') // Day 15 of 31 -> 17 days left (15 to 31)
-
-  const allowance = getTodaySpendingAllowance(summary, expenses, mockNow)
-  // Spent before today: 10000 - 500 = 9500
-  // Pool remaining: 31000 - 9500 = 21500
-  // 17 days remaining -> 21500 / 17 ~ 1265/day
-  assert.equal(allowance.todaySpent, 500)
-  assert.equal(allowance.todayAllowance, 1265)
-  assert.equal(allowance.remainingToday, 765) // 1265 - 500
-  assert.equal(allowance.status, 'on-track')
 })
 
 test('getUpcomingOutflows forecasts upcoming commitments and flags bank balance shortfall', () => {

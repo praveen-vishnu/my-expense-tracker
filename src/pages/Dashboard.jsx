@@ -2,7 +2,6 @@ import { useState, useMemo } from 'react'
 import { formatINR, formatMonthLabel, relativeDateLabel } from '../utils/formatting.js'
 import {
   groupExpensesByDate,
-  getTodaySpendingAllowance,
   getUpcomingOutflows,
   getPendingSplitReceivables,
 } from '../utils/calculations.js'
@@ -10,7 +9,6 @@ import ExpenseList from '../components/ExpenseList.jsx'
 import ModalSheet from '../components/ModalSheet.jsx'
 import {
   IconAlertTriangle,
-  IconCoins,
   IconReceipt,
   IconClock,
   IconBuildingBank,
@@ -46,11 +44,6 @@ export default function Dashboard({
     ...group,
     items: group.items.slice(0, 5),
   }))
-
-  // Real-world calculations
-  const todayAllowance = useMemo(() => {
-    return getTodaySpendingAllowance(summary, expenses)
-  }, [summary, expenses])
 
   const upcomingOutflows = useMemo(() => {
     return getUpcomingOutflows(recurringExpenses, accountBalances?.accounts || [])
@@ -141,59 +134,6 @@ export default function Dashboard({
           </strong>
         </article>
       </section>
-
-      {/* TODAY'S POCKET ALLOWANCE WIDGET */}
-      {todayAllowance && (summary.budget > 0 || summary.income > 0) ? (
-        <section className={`allowance-card allowance-${todayAllowance.normalizedStatus || todayAllowance.status}`} aria-label="Today's pocket allowance">
-          <div className="allowance-main">
-            <div className="allowance-label-group">
-              <span className="allowance-tag">
-                <IconCoins size={16} />
-                <span>Today's Pocket Allowance</span>
-              </span>
-              <p className="allowance-sub">
-                {(todayAllowance.normalizedStatus || todayAllowance.status) === 'over_budget' || todayAllowance.status === 'exceeded'
-                  ? 'Daily safe pace exceeded. Spending further today will increase your month-end overrun.'
-                  : (todayAllowance.normalizedStatus || todayAllowance.status) === 'caution' || todayAllowance.status === 'warning'
-                    ? 'Tight daily margin. Spend cautiously to preserve your month-end buffer.'
-                    : 'Discretionary spend you can comfortably afford today without risking monthly goals.'}
-              </p>
-            </div>
-            <div className="allowance-hero">
-              <span className={`allowance-val ${todayAllowance.isPositive || todayAllowance.todayAllowance > 0 ? 'positive' : 'negative'}`}>
-                {formatINR(todayAllowance.todayAllowance)}
-              </span>
-              <span className={`allowance-status-pill status-${todayAllowance.normalizedStatus || todayAllowance.status}`}>
-                {(todayAllowance.normalizedStatus || todayAllowance.status) === 'on_track' || todayAllowance.status === 'on-track'
-                  ? '✓ Safe to spend'
-                  : (todayAllowance.normalizedStatus || todayAllowance.status) === 'caution' || todayAllowance.status === 'warning'
-                    ? '▲ Tight buffer'
-                    : '● Exceeded'}
-              </span>
-            </div>
-          </div>
-          <div className="allowance-stats-grid">
-            <div className="allowance-stat-item">
-              <small>Spent Today</small>
-              <strong>{formatINR(todayAllowance.spentToday ?? todayAllowance.todaySpent ?? 0)}</strong>
-            </div>
-            <div className="allowance-stat-item">
-              <small>Safe Daily Pace</small>
-              <strong>{formatINR(todayAllowance.safeDaily ?? summary.safeDailySpend ?? todayAllowance.todayAllowance ?? 0)}/day</strong>
-            </div>
-            <div className="allowance-stat-item">
-              <small>Remaining Today</small>
-              <strong className={(todayAllowance.remainingToday ?? 0) < 0 ? 'money spent' : ''}>
-                {formatINR(todayAllowance.remainingToday ?? 0)}
-              </strong>
-            </div>
-            <div className="allowance-stat-item">
-              <small>Days Remaining</small>
-              <strong>{todayAllowance.remainingDays ?? 0} days</strong>
-            </div>
-          </div>
-        </section>
-      ) : null}
 
       <div className="dashboard-columns">
         <div className="dashboard-main-col">

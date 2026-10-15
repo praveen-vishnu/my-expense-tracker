@@ -510,52 +510,6 @@ export function calculateFinancialHealth(currentSummary, previousSummary = null)
 }
 
 /**
- * Calculates today's safe spending allowance based on remaining budget and days.
- */
-export function getTodaySpendingAllowance(summary, expenses = [], now = new Date()) {
-  const monthKey = summary?.monthKey || ''
-  const budget = summary?.budget || 0
-  const income = summary?.income || 0
-  const totalDays = daysInMonth(monthKey || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
-  const todayDay = now.getDate()
-  const todayISOStr = `${monthKey}-${String(todayDay).padStart(2, '0')}`
-
-  const todayExpenses = expenses.filter((e) => e.date === todayISOStr)
-  const todaySpent = sumExpenses(todayExpenses)
-
-  const remainingDays = Math.max(totalDays - todayDay + 1, 1)
-  const monthSpent = summary?.spent || 0
-  const spentBeforeToday = Math.max(monthSpent - todaySpent, 0)
-
-  let baseTarget = budget > 0 ? budget : income
-  let poolRemaining = Math.max(baseTarget - spentBeforeToday, 0)
-  let todayAllowance = Math.round(poolRemaining / remainingDays)
-  let remainingToday = todayAllowance - todaySpent
-
-  let status = 'on-track'
-  if (baseTarget > 0) {
-    if (todaySpent > todayAllowance) {
-      status = 'exceeded'
-    } else if (todayAllowance > 0 && (todaySpent / todayAllowance) >= 0.8) {
-      status = 'warning'
-    }
-  }
-
-  return {
-    todayISO: todayISOStr,
-    todaySpent,
-    spentToday: todaySpent,
-    todayAllowance,
-    remainingToday,
-    remainingDays,
-    safeDaily: summary?.safeDailySpend || todayAllowance,
-    isPositive: todayAllowance > 0,
-    status,
-    normalizedStatus: status === 'on-track' ? 'on_track' : status === 'warning' ? 'caution' : 'over_budget',
-  }
-}
-
-/**
  * Forecasts cash outflow for the upcoming window of days (recurring EMIs and credit card bills)
  * and flags low-balance shortfall warnings.
  */
