@@ -1244,6 +1244,115 @@ h2 {
   align-items: center;
 }
 
+.quick-presets-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.65rem 0.85rem;
+  background: rgba(31, 111, 84, 0.05);
+  border: 1px solid rgba(31, 111, 84, 0.15);
+  border-radius: 12px;
+  margin-top: -0.2rem;
+  margin-bottom: 0.1rem;
+}
+
+.preset-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.preset-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--pine);
+}
+
+.preset-subtext {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.preset-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.preset-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.65rem;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--ink);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.preset-chip:hover {
+  border-color: var(--pine);
+  background: rgba(31, 111, 84, 0.08);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.preset-chip:active {
+  transform: scale(0.96);
+}
+
+.preset-emoji {
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.preset-text {
+  font-weight: 500;
+}
+
+.preset-amount {
+  font-family: var(--mono);
+  font-weight: 700;
+  color: var(--pine);
+  background: rgba(31, 111, 84, 0.1);
+  padding: 0.1rem 0.35rem;
+  border-radius: 6px;
+  font-size: 0.74rem;
+}
+
+:root[data-theme='dark'] .quick-presets-strip {
+  background: rgba(216, 236, 225, 0.04);
+  border-color: rgba(216, 236, 225, 0.12);
+}
+
+:root[data-theme='dark'] .preset-label {
+  color: #9ddbc1;
+}
+
+:root[data-theme='dark'] .preset-chip {
+  background: #1b2621;
+  border-color: #3b4d44;
+  color: #e4ebe7;
+}
+
+:root[data-theme='dark'] .preset-chip:hover {
+  background: #23332c;
+  border-color: #9ddbc1;
+}
+
+:root[data-theme='dark'] .preset-amount {
+  color: #9ddbc1;
+  background: rgba(157, 219, 193, 0.12);
+}
+
 .dialog {
   position: fixed;
   inset: auto 0 0;

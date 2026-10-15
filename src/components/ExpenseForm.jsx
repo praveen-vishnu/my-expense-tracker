@@ -52,10 +52,10 @@ export default function ExpenseForm({
 
   // Quick logging presets
   const presets = [
-    { label: 'Chai / Coffee', amount: 30, category: categories.find((c) => /food|dine|dining|chai/i.test(c)) || categories[0], note: 'Tea / Coffee' },
-    { label: 'Auto / Cab', amount: 120, category: categories.find((c) => /travel|transport|commute/i.test(c)) || categories[0], note: 'Commute' },
-    { label: 'Groceries', amount: 350, category: categories.find((c) => /grocery|groceries|kirana/i.test(c)) || categories[0], note: 'Quick Groceries' },
-    { label: 'Lunch / Dinner', amount: 450, category: categories.find((c) => /food|dine|dining/i.test(c)) || categories[0], note: 'Meal' },
+    { emoji: '☕', label: 'Chai / Coffee', amount: 30, category: categories.find((c) => /food|dine|dining|chai/i.test(c)) || categories[0], note: 'Tea / Coffee' },
+    { emoji: '🛺', label: 'Auto / Cab', amount: 120, category: categories.find((c) => /travel|transport|commute/i.test(c)) || categories[0], note: 'Commute' },
+    { emoji: '🛒', label: 'Groceries', amount: 350, category: categories.find((c) => /grocery|groceries|kirana/i.test(c)) || categories[0], note: 'Quick Groceries' },
+    { emoji: '🍱', label: 'Lunch / Dinner', amount: 450, category: categories.find((c) => /food|dine|dining/i.test(c)) || categories[0], note: 'Meal' },
   ]
 
   function applyPreset(preset) {
@@ -157,7 +157,10 @@ export default function ExpenseForm({
         {/* 1-TAP FREQUENT PRESETS */}
         {!isEdit ? (
           <div className="quick-presets-strip">
-            <span className="preset-label">Quick Presets:</span>
+            <div className="preset-header">
+              <span className="preset-label">Quick Presets</span>
+              <small className="preset-subtext">Tap to autofill</small>
+            </div>
             <div className="preset-chips">
               {presets.map((p) => (
                 <button
@@ -166,7 +169,9 @@ export default function ExpenseForm({
                   className="preset-chip"
                   onClick={() => applyPreset(p)}
                 >
-                  {p.label} <small>₹{p.amount}</small>
+                  <span className="preset-emoji">{p.emoji}</span>
+                  <span className="preset-text">{p.label}</span>
+                  <span className="preset-amount">₹{p.amount}</span>
                 </button>
               ))}
             </div>
