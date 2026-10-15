@@ -617,6 +617,12 @@ export function useTrackerData(authReady, authUser, month) {
     saveLocalData(normalized)
   }, [])
 
+  const clearAllData = useCallback(() => {
+    const empty = emptyData()
+    setData(empty)
+    saveLocalData(empty)
+  }, [])
+
   const confirmStatementAlias = useCallback((scheduleId, rawNarration) => {
     if (!scheduleId || !rawNarration) return
     const key = normalizeNarration(rawNarration)

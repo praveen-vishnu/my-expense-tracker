@@ -77,3 +77,4 @@ for (const [name, rows, schedules, aliases, expected] of SCENARIOS) {
     })
   })
 }
+
