@@ -71,6 +71,8 @@ export default function App() {
     setDefaultAccount,
     saveTransfer,
     deleteTransfer,
+    confirmStatementAlias,
+    rejectStatementAlias,
     importData,
     clearAllData,
   } = useTrackerData(authReady, authUser, month)
@@ -444,6 +446,9 @@ export default function App() {
           categories={data.categories}
           accounts={data.accounts || []}
           existingExpenses={data.expenses}
+          aliases={data.statementAliases || []}
+          onConfirmAlias={confirmStatementAlias}
+          onRejectAlias={rejectStatementAlias}
           onImportBatch={(imported, replacedIds) => {
             if (replacedIds?.length) {
               deleteBatchExpenses(replacedIds)

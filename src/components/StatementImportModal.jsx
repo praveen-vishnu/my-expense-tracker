@@ -8,6 +8,9 @@ export default function StatementImportModal({
   categories = [],
   accounts = [],
   existingExpenses = [],
+  aliases = [],
+  onConfirmAlias,
+  onRejectAlias,
   onImportBatch,
   onDismiss,
 }) {
@@ -28,6 +31,7 @@ export default function StatementImportModal({
       const result = await parseBankStatementFile(file, {
         availableCategories: categories,
         existingExpenses,
+        aliases,
         defaultAccountId: selectedAccountId,
       })
 
@@ -42,6 +46,7 @@ export default function StatementImportModal({
         totalParsed: result.totalParsed,
         duplicateCount: result.duplicateCount,
         recurringCount: result.recurringCount || 0,
+        suggestedCount: result.suggestedCount || 0,
       })
     } catch (err) {
       setError(`Failed to read statement: ${err.message || 'Unknown error'}`)
@@ -73,6 +78,61 @@ export default function StatementImportModal({
     setTransactions((current) => current.map((t) => ({ ...t, selected: val })))
   }
 
+  function handleLinkSuggestion(id) {
+    setTransactions((current) =>
+      current.map((t) => {
+        if (t.id !== id) return t
+        if (onConfirmAlias && t.matchedExpenseId && t.rawNarration) {
+          onConfirmAlias(t.matchedExpenseId, t.rawNarration)
+        }
+        return {
+          ...t,
+          matchStatus: 'linked',
+          isDuplicate: true,
+          isRecurringMatch: true,
+          selected: false,
+        }
+      })
+    )
+  }
+
+  function handleDismissSuggestion(id) {
+    setTransactions((current) =>
+      current.map((t) => {
+        if (t.id !== id) return t
+        if (onRejectAlias && t.matchedExpenseId && t.rawNarration) {
+          onRejectAlias(t.matchedExpenseId, t.rawNarration)
+        }
+        return {
+          ...t,
+          matchStatus: 'new',
+          isDuplicate: false,
+          isRecurringMatch: false,
+          matchedExpenseId: null,
+          matchedNote: null,
+          selected: true,
+        }
+      })
+    )
+  }
+
+  function handleUndoLinked(id) {
+    setTransactions((current) =>
+      current.map((t) => {
+        if (t.id !== id) return t
+        return {
+          ...t,
+          matchStatus: 'new',
+          isDuplicate: false,
+          isRecurringMatch: false,
+          matchedExpenseId: null,
+          matchedNote: null,
+          selected: true,
+        }
+      })
+    )
+  }
+
   function handleConfirmImport() {
     const selected = (transactions || []).filter((t) => t.selected)
     const toImport = selected.map((t) => ({
@@ -102,6 +162,9 @@ export default function StatementImportModal({
   const selectedTotal = (transactions || [])
     .filter((t) => t.selected)
     .reduce((sum, t) => sum + t.amount, 0)
+  const duplicateCount = (transactions || []).filter((t) => t.isDuplicate).length
+  const recurringCount = (transactions || []).filter((t) => t.isRecurringMatch).length
+  const suggestedCount = (transactions || []).filter((t) => t.matchStatus === 'suggested').length
 
   return (
     <ModalSheet titleId="import-modal-title" className="sheet-wide" onDismiss={onDismiss}>
@@ -180,13 +243,19 @@ export default function StatementImportModal({
                 <strong>{selectedCount} of {summaryInfo?.totalParsed} selected</strong>
                 <small className="muted">Total: <span className="money">{formatINR(selectedTotal)}</span></small>
               </div>
-              {summaryInfo?.duplicateCount > 0 ? (
+              {duplicateCount > 0 || suggestedCount > 0 ? (
                 <div className="duplicate-alert">
                   <IconAlertTriangle size={16} />
                   <span>
-                    {summaryInfo.duplicateCount} duplicate{summaryInfo.duplicateCount > 1 ? 's' : ''} auto-unselected
-                    {summaryInfo?.recurringCount > 0
-                      ? ` (${summaryInfo.recurringCount} recurring EMI/Rent/Bills matched)`
+                    {duplicateCount > 0
+                      ? `${duplicateCount} duplicate${duplicateCount > 1 ? 's' : ''} auto-unselected`
+                      : ''}
+                    {recurringCount > 0
+                      ? ` (${recurringCount} recurring matched)`
+                      : ''}
+                    {duplicateCount > 0 && suggestedCount > 0 ? ' · ' : ''}
+                    {suggestedCount > 0
+                      ? `${suggestedCount} suggestion${suggestedCount > 1 ? 's' : ''} to review`
                       : ''}
                   </span>
                 </div>
@@ -226,12 +295,43 @@ export default function StatementImportModal({
                       <td className="table-date">{formatShortDate(t.date)}</td>
                       <td>
                         <strong>{t.note}</strong>
-                        {t.isRecurringMatch ? (
+                        {t.matchStatus === 'linked' ? (
                           <span
                             className="dup-badge recurring-badge"
-                            title="Matches an existing recurring schedule for this month"
+                            title={t.matchReasons?.join(', ') || 'Matches an existing recurring schedule for this month'}
                           >
-                            Matches recurring ({t.matchedNote || t.category})
+                            Matches {t.matchedNote || t.category}
+                            <button
+                              type="button"
+                              className="badge-action-btn"
+                              onClick={() => handleUndoLinked(t.id)}
+                              title="Unlink and keep this transaction selected for import"
+                            >
+                              Undo
+                            </button>
+                          </span>
+                        ) : t.matchStatus === 'suggested' ? (
+                          <span
+                            className="dup-badge suggested-badge"
+                            title={t.matchReasons?.join(', ') || 'Possible match for a recurring expense'}
+                          >
+                            Looks like {t.matchedNote || t.category}?
+                            <button
+                              type="button"
+                              className="badge-action-btn"
+                              onClick={() => handleLinkSuggestion(t.id)}
+                              title="Link to recurring expense and remember for future statements"
+                            >
+                              Link
+                            </button>
+                            <button
+                              type="button"
+                              className="badge-action-btn"
+                              onClick={() => handleDismissSuggestion(t.id)}
+                              title="Not this expense (remember rejection)"
+                            >
+                              Not this
+                            </button>
                           </span>
                         ) : t.isDuplicate ? (
                           <span className="dup-badge">Already logged</span>

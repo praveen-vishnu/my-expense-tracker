@@ -1,4 +1,5 @@
 import { createId, isValidDate, pad2 } from './formatting.js'
+import { reconcileRows } from './reconcile.js'
 
 /**
  * Intelligent bank statement CSV parser for Indian & International banks.
@@ -249,12 +250,74 @@ function parseCSVRows(csvText) {
   return lines
 }
 
+function isGenericNote(note) {
+  if (!note) return true
+  const n = String(note).trim().toLowerCase()
+  return (
+    n === 'expense' ||
+    n === 'debit' ||
+    n === 'payment' ||
+    n === 'bank transfer' ||
+    n === 'upi' ||
+    n === 'nach' ||
+    n === 'ach' ||
+    n === 'other'
+  )
+}
+
+function getMeaningfulWords(str) {
+  return String(str || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length >= 3 && !isGenericNote(w))
+}
+
+function areExpensesCompatible(exp, candNote, candCategory) {
+  const expNote = (exp.note || '').trim().toLowerCase()
+  const cNote = (candNote || '').trim().toLowerCase()
+
+  const expWords = getMeaningfulWords(expNote)
+  const candWords = getMeaningfulWords(cNote)
+
+  const noteOverlap = Boolean(
+    (expNote && cNote && (expNote.includes(cNote) || cNote.includes(expNote))) ||
+    (expWords.length && candWords.length && expWords.some((w) =>
+      candWords.some((cw) => w === cw || (w.length > 3 && cw.length > 3 && (w.includes(cw) || cw.includes(w))))
+    ))
+  )
+
+  const hasDistinctContradictoryNotes = (
+    expWords.length > 0 &&
+    candWords.length > 0 &&
+    !noteOverlap
+  )
+
+  if (hasDistinctContradictoryNotes) {
+    return false
+  }
+
+  const specificCatMatch = Boolean(
+    exp.category &&
+    candCategory &&
+    exp.category.toLowerCase() !== 'other' &&
+    exp.category.toLowerCase() === candCategory.toLowerCase()
+  )
+
+  return noteOverlap || specificCatMatch
+}
+
 /**
  * Main parser function: takes an array of 2D string rows (from CSV, TXT, or Excel)
  * and processes transactions, categories, and duplicate detection with 100% precision.
  */
 export function parseBankStatementRows(rows, options = {}) {
-  const { availableCategories = [], existingExpenses = [], defaultAccountId = null } = options
+  const {
+    availableCategories = [],
+    existingExpenses = [],
+    aliases = [],
+    defaultAccountId = null,
+  } = options
 
   if (!Array.isArray(rows) || rows.length < 2) {
     return { ok: false, error: 'The statement file does not contain enough data rows.' }
@@ -323,8 +386,6 @@ export function parseBankStatementRows(rows, options = {}) {
   const amountCol = headers.findIndex((h) => h === 'amount' || h.includes('txn amount') || h.includes('amount (inr)') || h.includes('net amount'))
 
   const candidates = []
-  let duplicateCount = 0
-  let recurringCount = 0
 
   for (let r = headerIndex + 1; r < rows.length; r++) {
     const row = rows[r]
@@ -374,113 +435,6 @@ export function parseBankStatementRows(rows, options = {}) {
     const cleanedNote = cleanNarration(rawNarration)
     const category = predictCategory(rawNarration + ' ' + cleanedNote, availableCategories)
 
-    // Helper: detect if a note is a generic banking placeholder rather than a specific merchant/payee
-    const isGenericNote = (note) => {
-      if (!note) return true
-      const n = String(note).trim().toLowerCase()
-      return (
-        n === 'expense' ||
-        n === 'debit' ||
-        n === 'payment' ||
-        n === 'bank transfer' ||
-        n === 'upi' ||
-        n === 'nach' ||
-        n === 'ach' ||
-        n === 'other'
-      )
-    }
-
-    // Helper: extract meaningful keywords from a note (length >= 3, alphanumeric)
-    const getMeaningfulWords = (str) => {
-      return String(str || '')
-        .toLowerCase()
-        .replace(/[^a-z0-9\s]/g, ' ')
-        .split(/\s+/)
-        .filter((w) => w.length >= 3 && !isGenericNote(w))
-    }
-
-    // Helper: evaluate if an existing expense is truly compatible with this statement row
-    const areExpensesCompatible = (exp) => {
-      const expNote = (exp.note || '').trim().toLowerCase()
-      const candNote = (cleanedNote || '').trim().toLowerCase()
-
-      const expWords = getMeaningfulWords(expNote)
-      const candWords = getMeaningfulWords(candNote)
-
-      // Check if notes share any meaningful merchant/payee keyword (e.g. "Bajaj Finance" vs "Bajaj Finance Loan EMI")
-      const noteOverlap = Boolean(
-        (expNote && candNote && (expNote.includes(candNote) || candNote.includes(expNote))) ||
-        (expWords.length && candWords.length && expWords.some((w) =>
-          candWords.some((cw) => w === cw || (w.length > 3 && cw.length > 3 && (w.includes(cw) || cw.includes(w))))
-        ))
-      )
-
-      // If both have specific merchant/payee names that share NO words
-      // (e.g. existing is "SIP" while statement is "Croma" or "Electricity"),
-      // they are strictly different transactions even if the amounts happen to be identical!
-      const hasDistinctContradictoryNotes = (
-        expWords.length > 0 &&
-        candWords.length > 0 &&
-        !noteOverlap
-      )
-
-      if (hasDistinctContradictoryNotes) {
-        return false
-      }
-
-      // Check specific category match (ignoring generic 'Other')
-      const specificCatMatch = Boolean(
-        exp.category &&
-        category &&
-        exp.category.toLowerCase() !== 'other' &&
-        exp.category.toLowerCase() === category.toLowerCase()
-      )
-
-      return noteOverlap || specificCatMatch
-    }
-
-    // 1. Exact match (same date, same amount, and compatible note/category)
-    let matchedExpense = existingExpenses.find(
-      (exp) =>
-        exp.date === isoDate &&
-        Math.abs(exp.amount - amount) < 0.01 &&
-        areExpensesCompatible(exp)
-    )
-
-    // 2. Smart recurring match for EMI, Rent, SIP, and Bills
-    // In PennyWise, recurring expenses materialize as recurring_<scheduleId>_<month>
-    // Bank clearing dates often vary by +/- 4 days due to weekends/clearing cycles
-    if (!matchedExpense) {
-      matchedExpense = existingExpenses.find((exp) => {
-        const isRecurring = Boolean(exp.recurringId || (exp.id && String(exp.id).startsWith('recurring_')))
-        if (!isRecurring) return false
-
-        // Must be in the same year-month
-        if (!exp.date || exp.date.slice(0, 7) !== isoDate.slice(0, 7)) return false
-
-        // Exact amount match
-        if (Math.abs(exp.amount - amount) >= 0.01) return false
-
-        // Date difference within 4 days (covers weekend/holiday clearing delays)
-        const expTime = new Date(exp.date).getTime()
-        const curTime = new Date(isoDate).getTime()
-        const dayDiff = Math.abs(curTime - expTime) / (1000 * 3600 * 24)
-        if (dayDiff > 4) return false
-
-        return areExpensesCompatible(exp)
-      })
-    }
-
-    const isDuplicate = Boolean(matchedExpense)
-    const isRecurringMatch = Boolean(
-      matchedExpense && (matchedExpense.recurringId || String(matchedExpense.id).startsWith('recurring_'))
-    )
-
-    if (isDuplicate) {
-      duplicateCount++
-      if (isRecurringMatch) recurringCount++
-    }
-
     candidates.push({
       id: createId(),
       date: isoDate,
@@ -489,11 +443,6 @@ export function parseBankStatementRows(rows, options = {}) {
       rawNarration,
       category,
       accountId: defaultAccountId,
-      isDuplicate,
-      isRecurringMatch,
-      matchedExpenseId: matchedExpense?.id || null,
-      matchedNote: matchedExpense?.note || null,
-      selected: !isDuplicate, // Unchecked by default if duplicate or recurring match
     })
   }
 
@@ -504,12 +453,95 @@ export function parseBankStatementRows(rows, options = {}) {
     }
   }
 
+  // Separate recurring expenses from non-recurring manual expenses
+  const recurringSchedules = (existingExpenses || []).filter(
+    (e) => e.recurringId || String(e.id || '').startsWith('recurring_')
+  )
+  const nonRecurringExpenses = (existingExpenses || []).filter(
+    (e) => !e.recurringId && !String(e.id || '').startsWith('recurring_')
+  )
+
+  // Reconcile statement rows with recurring schedules using payment-rails taxonomy & learned aliases
+  const reconcileResults = reconcileRows(candidates, recurringSchedules, { aliases })
+
+  let duplicateCount = 0
+  let recurringCount = 0
+  let suggestedCount = 0
+
+  const reconciledCandidates = candidates.map((t, i) => {
+    const rec = reconcileResults[i] || { status: 'new', scheduleId: null, score: 0, reasons: [] }
+
+    // Check if manually logged (exact same date, exact amount, and compatible note/category)
+    const manualMatch = nonRecurringExpenses.find(
+      (exp) => exp.date === t.date && Math.abs(exp.amount - t.amount) < 0.01 && areExpensesCompatible(exp, t.note, t.category)
+    )
+
+    if (rec.status === 'linked') {
+      duplicateCount++
+      recurringCount++
+      return {
+        ...t,
+        isDuplicate: true,
+        isRecurringMatch: true,
+        matchStatus: 'linked',
+        matchScore: rec.score,
+        matchReasons: rec.reasons,
+        matchedExpenseId: rec.scheduleId,
+        matchedNote: rec.schedule?.note || rec.schedule?.category || null,
+        selected: false, // Auto-unselected so not double-counted
+      }
+    }
+
+    if (rec.status === 'suggested') {
+      suggestedCount++
+      return {
+        ...t,
+        isDuplicate: false,
+        isRecurringMatch: false,
+        matchStatus: 'suggested',
+        matchScore: rec.score,
+        matchReasons: rec.reasons,
+        matchedExpenseId: rec.scheduleId,
+        matchedNote: rec.schedule?.note || rec.schedule?.category || null,
+        selected: true, // Kept selected by default; user can 1-click Link
+      }
+    }
+
+    if (manualMatch) {
+      duplicateCount++
+      return {
+        ...t,
+        isDuplicate: true,
+        isRecurringMatch: false,
+        matchStatus: 'manual_duplicate',
+        matchScore: 90,
+        matchReasons: ['already logged on this date'],
+        matchedExpenseId: manualMatch.id,
+        matchedNote: manualMatch.note,
+        selected: false,
+      }
+    }
+
+    return {
+      ...t,
+      isDuplicate: false,
+      isRecurringMatch: false,
+      matchStatus: 'new',
+      matchScore: 0,
+      matchReasons: [],
+      matchedExpenseId: null,
+      matchedNote: null,
+      selected: true,
+    }
+  })
+
   return {
     ok: true,
-    transactions: candidates,
-    totalParsed: candidates.length,
+    transactions: reconciledCandidates,
+    totalParsed: reconciledCandidates.length,
     duplicateCount,
     recurringCount,
+    suggestedCount,
   }
 }
 

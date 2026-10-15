@@ -24,6 +24,7 @@ export function emptyData() {
     accounts: defaultStarterAccounts(),
     transfers: [],
     categories: [],
+    statementAliases: [],
   }
 }
 
@@ -222,6 +223,20 @@ function normalizeIncomeSources(incomeSources) {
     }))
 }
 
+function normalizeStatementAliases(aliases) {
+  if (!Array.isArray(aliases)) return []
+  return aliases
+    .filter((a) => a && typeof a.scheduleId === 'string' && a.scheduleId && typeof a.key === 'string' && a.key.trim())
+    .map((a) => ({
+      id: typeof a.id === 'string' && a.id ? a.id : `alias_${a.scheduleId}_${a.key.trim().replace(/\s+/g, '_')}`,
+      scheduleId: a.scheduleId,
+      key: a.key.trim().toLowerCase(),
+      confirmedCount: Number.isInteger(Number(a.confirmedCount)) ? Number(a.confirmedCount) : 1,
+      rejectedCount: Number.isInteger(Number(a.rejectedCount)) ? Number(a.rejectedCount) : 0,
+      lastSeen: typeof a.lastSeen === 'string' ? a.lastSeen : null,
+    }))
+}
+
 export function normalizeData(raw) {
   if (!raw || typeof raw !== 'object') return emptyData()
 
@@ -261,6 +276,7 @@ export function normalizeData(raw) {
     accounts: normalizeAccounts(raw.accounts),
     transfers: normalizeTransfers(raw.transfers),
     categories: normalizeCategories(raw.categories),
+    statementAliases: normalizeStatementAliases(raw.statementAliases),
   }
 }
 

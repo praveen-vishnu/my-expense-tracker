@@ -2204,6 +2204,28 @@ h2 {
   color: #4f46e5;
 }
 
+.dup-badge.suggested-badge {
+  background: rgba(245, 158, 11, 0.15);
+  color: #b45309;
+}
+
+.badge-action-btn {
+  background: none;
+  border: none;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+  margin-left: 0.4rem;
+  padding: 0;
+  color: inherit;
+  opacity: 0.85;
+}
+
+.badge-action-btn:hover {
+  opacity: 1;
+}
+
 .table-select {
   padding: 0.35rem 0.55rem;
   border-radius: 8px;

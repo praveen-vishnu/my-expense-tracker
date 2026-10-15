@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { emptyData, loadData, saveData, normalizeData, saveLocalData } from '../utils/storage.js'
 import { addRecurringExpenses } from '../utils/recurring.js'
-import { createId, isValidDate } from '../utils/formatting.js'
+import { createId, isValidDate, todayISO } from '../utils/formatting.js'
+import { normalizeNarration } from '../utils/reconcile.js'
 import { isSupabaseConfigured, supabase } from '../utils/supabase.js'
 import { enqueueMutation } from '../sync/outbox.js'
 import {
@@ -616,10 +617,78 @@ export function useTrackerData(authReady, authUser, month) {
     saveLocalData(normalized)
   }, [])
 
-  const clearAllData = useCallback(() => {
-    const cleared = emptyData()
-    setData(cleared)
-    saveLocalData(cleared)
+  const confirmStatementAlias = useCallback((scheduleId, rawNarration) => {
+    if (!scheduleId || !rawNarration) return
+    const key = normalizeNarration(rawNarration)
+    if (!key) return
+    const today = todayISO()
+
+    setData((current) => {
+      const existingAliases = current.statementAliases || []
+      const idx = existingAliases.findIndex((a) => a.scheduleId === scheduleId && a.key === key)
+      let nextAliases = [...existingAliases]
+      if (idx !== -1) {
+        nextAliases[idx] = {
+          ...nextAliases[idx],
+          confirmedCount: (nextAliases[idx].confirmedCount || 0) + 1,
+          lastSeen: today,
+        }
+      } else {
+        nextAliases.push({
+          id: `alias_${scheduleId}_${key.replace(/\s+/g, '_')}`,
+          scheduleId,
+          key,
+          confirmedCount: 1,
+          rejectedCount: 0,
+          lastSeen: today,
+        })
+      }
+      const updated = { ...current, statementAliases: nextAliases }
+      saveLocalData(updated)
+      return updated
+    })
+  }, [])
+
+  const rejectStatementAlias = useCallback((scheduleId, rawNarration) => {
+    if (!scheduleId || !rawNarration) return
+    const key = normalizeNarration(rawNarration)
+    if (!key) return
+    const today = todayISO()
+
+    setData((current) => {
+      const existingAliases = current.statementAliases || []
+      const idx = existingAliases.findIndex((a) => a.scheduleId === scheduleId && a.key === key)
+      let nextAliases = [...existingAliases]
+      if (idx !== -1) {
+        nextAliases[idx] = {
+          ...nextAliases[idx],
+          rejectedCount: (nextAliases[idx].rejectedCount || 0) + 1,
+          lastSeen: today,
+        }
+      } else {
+        nextAliases.push({
+          id: `alias_${scheduleId}_${key.replace(/\s+/g, '_')}`,
+          scheduleId,
+          key,
+          confirmedCount: 0,
+          rejectedCount: 1,
+          lastSeen: today,
+        })
+      }
+      const updated = { ...current, statementAliases: nextAliases }
+      saveLocalData(updated)
+      return updated
+    })
+  }, [])
+
+  const deleteStatementAlias = useCallback((aliasId) => {
+    if (!aliasId) return
+    setData((current) => {
+      const remaining = (current.statementAliases || []).filter((a) => a.id !== aliasId)
+      const updated = { ...current, statementAliases: remaining }
+      saveLocalData(updated)
+      return updated
+    })
   }, [])
 
   return {
@@ -653,6 +722,9 @@ export function useTrackerData(authReady, authUser, month) {
     setDefaultAccount,
     saveTransfer,
     deleteTransfer,
+    confirmStatementAlias,
+    rejectStatementAlias,
+    deleteStatementAlias,
     importData,
     clearAllData,
   }
