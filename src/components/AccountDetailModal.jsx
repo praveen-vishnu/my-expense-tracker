@@ -264,7 +264,7 @@ export default function AccountDetailModal({
                 </div>
                 <div className="cycle-amount-col">
                   <span className="cycle-amount money spent">{formatINR(cycleData.cycleSpend)}</span>
-                  <small className="muted">{cycleData.cycleExpenses.length} transaction{cycleData.cycleExpenses.length === 1 ? '' : 's'}</small>
+                  <small className="muted">{(cycleData.cycleExpenses?.length ?? cycleData.expenseCount ?? 0)} transaction{(cycleData.cycleExpenses?.length ?? cycleData.expenseCount ?? 0) === 1 ? '' : 's'}</small>
                 </div>
               </div>
               <p className="cycle-footnote">

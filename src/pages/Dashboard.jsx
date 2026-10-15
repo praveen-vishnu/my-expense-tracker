@@ -74,16 +74,16 @@ export default function Dashboard({
       </header>
 
       {/* SHORTFALL ALERT BANNER */}
-      {upcomingOutflows.shortfalls.length > 0 ? (
+      {(upcomingOutflows?.shortfalls || upcomingOutflows?.shortfallAlerts || []).length > 0 ? (
         <div className="shortfall-alert-banner" role="alert">
           <div className="shortfall-banner-icon">
             <IconAlertTriangle size={24} />
           </div>
           <div className="shortfall-banner-content">
             <strong>Upcoming Balance Shortfall Warning</strong>
-            {upcomingOutflows.shortfalls.map((sf) => (
-              <p key={sf.account.id}>
-                {sf.account.name} has only <strong>{formatINR(sf.account.currentBalance)}</strong>, which is insufficient for upcoming scheduled commitments totaling <strong>{formatINR(sf.totalDue)}</strong> due in the next 7 days.
+            {(upcomingOutflows.shortfalls || upcomingOutflows.shortfallAlerts).map((sf) => (
+              <p key={sf.accountId || sf.account?.id}>
+                {sf.accountName || sf.account?.name || 'Account'} has only <strong>{formatINR(sf.currentBalance)}</strong>, which is insufficient for upcoming scheduled commitments totaling <strong>{formatINR(sf.totalDue || sf.upcomingOutflow)}</strong> due in the next 7 days.
               </p>
             ))}
           </div>
@@ -92,8 +92,11 @@ export default function Dashboard({
               type="button"
               className="btn btn-secondary btn-sm shortfall-action-btn"
               onClick={() => {
-                const first = upcomingOutflows.shortfalls[0]
-                onOpenTransfer(null, first.account.id, first.shortfall)
+                const list = upcomingOutflows.shortfalls || upcomingOutflows.shortfallAlerts
+                const first = list[0]
+                if (first) {
+                  onOpenTransfer(null, first.accountId || first.account?.id, first.shortfall)
+                }
               }}
             >
               Transfer Funds
@@ -140,8 +143,8 @@ export default function Dashboard({
       </section>
 
       {/* TODAY'S POCKET ALLOWANCE WIDGET */}
-      {summary.budget > 0 || summary.income > 0 ? (
-        <section className={`allowance-card allowance-${todayAllowance.status}`} aria-label="Today's pocket allowance">
+      {todayAllowance && (summary.budget > 0 || summary.income > 0) ? (
+        <section className={`allowance-card allowance-${todayAllowance.normalizedStatus || todayAllowance.status}`} aria-label="Today's pocket allowance">
           <div className="allowance-main">
             <div className="allowance-label-group">
               <span className="allowance-tag">
@@ -149,40 +152,44 @@ export default function Dashboard({
                 <span>Today's Pocket Allowance</span>
               </span>
               <p className="allowance-sub">
-                {todayAllowance.status === 'over_budget'
+                {(todayAllowance.normalizedStatus || todayAllowance.status) === 'over_budget' || todayAllowance.status === 'exceeded'
                   ? 'Daily safe pace exceeded. Spending further today will increase your month-end overrun.'
-                  : todayAllowance.status === 'caution'
+                  : (todayAllowance.normalizedStatus || todayAllowance.status) === 'caution' || todayAllowance.status === 'warning'
                     ? 'Tight daily margin. Spend cautiously to preserve your month-end buffer.'
                     : 'Discretionary spend you can comfortably afford today without risking monthly goals.'}
               </p>
             </div>
             <div className="allowance-hero">
-              <span className={`allowance-val ${todayAllowance.isPositive ? 'positive' : 'negative'}`}>
+              <span className={`allowance-val ${todayAllowance.isPositive || todayAllowance.todayAllowance > 0 ? 'positive' : 'negative'}`}>
                 {formatINR(todayAllowance.todayAllowance)}
               </span>
-              <span className={`allowance-status-pill status-${todayAllowance.status}`}>
-                {todayAllowance.status === 'on_track' ? '✓ Safe to spend' : todayAllowance.status === 'caution' ? '▲ Tight buffer' : '● Exceeded'}
+              <span className={`allowance-status-pill status-${todayAllowance.normalizedStatus || todayAllowance.status}`}>
+                {(todayAllowance.normalizedStatus || todayAllowance.status) === 'on_track' || todayAllowance.status === 'on-track'
+                  ? '✓ Safe to spend'
+                  : (todayAllowance.normalizedStatus || todayAllowance.status) === 'caution' || todayAllowance.status === 'warning'
+                    ? '▲ Tight buffer'
+                    : '● Exceeded'}
               </span>
             </div>
           </div>
           <div className="allowance-stats-grid">
             <div className="allowance-stat-item">
               <small>Spent Today</small>
-              <strong>{formatINR(todayAllowance.spentToday)}</strong>
+              <strong>{formatINR(todayAllowance.spentToday ?? todayAllowance.todaySpent ?? 0)}</strong>
             </div>
             <div className="allowance-stat-item">
               <small>Safe Daily Pace</small>
-              <strong>{formatINR(todayAllowance.safeDaily)}/day</strong>
+              <strong>{formatINR(todayAllowance.safeDaily ?? summary.safeDailySpend ?? todayAllowance.todayAllowance ?? 0)}/day</strong>
             </div>
             <div className="allowance-stat-item">
               <small>Remaining Today</small>
-              <strong className={todayAllowance.remainingToday < 0 ? 'money spent' : ''}>
-                {formatINR(todayAllowance.remainingToday)}
+              <strong className={(todayAllowance.remainingToday ?? 0) < 0 ? 'money spent' : ''}>
+                {formatINR(todayAllowance.remainingToday ?? 0)}
               </strong>
             </div>
             <div className="allowance-stat-item">
               <small>Days Remaining</small>
-              <strong>{todayAllowance.remainingDays} days</strong>
+              <strong>{todayAllowance.remainingDays ?? 0} days</strong>
             </div>
           </div>
         </section>
@@ -445,31 +452,34 @@ export default function Dashboard({
           ) : null}
 
           {/* MONEY OWED TO YOU (SPLIT RECEIVABLES) WIDGET */}
-          {splitReceivables.count > 0 ? (
+          {(splitReceivables?.receivables || splitReceivables?.items || []).length > 0 ? (
             <section className="panel receivables-panel">
               <div className="panel-head">
                 <div>
                   <h2>Money Owed to You</h2>
-                  <p className="muted">{splitReceivables.count} pending reimbursement{splitReceivables.count === 1 ? '' : 's'}</p>
+                  <p className="muted">
+                    {(splitReceivables.receivables || splitReceivables.items).length} pending reimbursement
+                    {(splitReceivables.receivables || splitReceivables.items).length === 1 ? '' : 's'}
+                  </p>
                 </div>
                 <span className="receivables-total money positive">
-                  +{formatINR(splitReceivables.totalOwed)}
+                  +{formatINR(splitReceivables.totalOwed || 0)}
                 </span>
               </div>
               <div className="receivables-list">
-                {splitReceivables.receivables.map((item) => (
-                  <div key={item.id} className="receivable-item">
+                {(splitReceivables.receivables || splitReceivables.items).map((item) => (
+                  <div key={item.id || item.expenseId} className="receivable-item">
                     <div className="receivable-info">
                       <div className="receivable-name-row">
-                        <strong>{item.split.owedBy || 'Friend'}</strong>
+                        <strong>{item.split?.owedBy || item.owedBy || 'Friend'}</strong>
                         <span className="receivable-date">{relativeDateLabel(item.date)}</span>
                       </div>
                       <small className="muted">
-                        For {item.category}{item.note ? ` (${item.note})` : ''} · Total {formatINR(item.amount)}
+                        For {item.category}{item.note ? ` (${item.note})` : ''} · Total {formatINR(item.amount || item.totalAmount || 0)}
                       </small>
                     </div>
                     <div className="receivable-actions">
-                      <span className="receivable-amount positive">+{formatINR(item.split.owedAmount)}</span>
+                      <span className="receivable-amount positive">+{formatINR(item.split?.owedAmount || item.owedAmount || 0)}</span>
                       {onSettleSplit ? (
                         <button
                           type="button"
@@ -488,7 +498,7 @@ export default function Dashboard({
           ) : null}
 
           {/* UPCOMING 7-DAY OUTFLOWS WIDGET */}
-          {upcomingOutflows.upcoming.length > 0 ? (
+          {(upcomingOutflows?.upcoming || upcomingOutflows?.items || []).length > 0 ? (
             <section className="panel upcoming-panel">
               <div className="panel-head">
                 <div>
@@ -496,26 +506,30 @@ export default function Dashboard({
                   <p className="muted">Scheduled EMIs and bills</p>
                 </div>
                 <span className="upcoming-total money spent">
-                  {formatINR(upcomingOutflows.totalUpcoming)}
+                  {formatINR(upcomingOutflows.totalUpcoming || upcomingOutflows.totalOutflow || 0)}
                 </span>
               </div>
               <div className="upcoming-list">
-                {upcomingOutflows.upcoming.map((item) => (
+                {(upcomingOutflows.upcoming || upcomingOutflows.items).map((item) => (
                   <div key={item.id} className="upcoming-item">
                     <div className="upcoming-info">
                       <div className="upcoming-title-row">
                         <strong>{item.name}</strong>
                         <span className={`upcoming-day-badge ${item.isDueSoon ? 'badge-urgent' : ''}`}>
-                          {item.daysRemaining === 0 ? 'Today' : item.daysRemaining === 1 ? 'Tomorrow' : `in ${item.daysRemaining} days`}
+                          {item.daysRemaining === 0 || item.daysAway === 0
+                            ? 'Today'
+                            : (item.daysRemaining === 1 || item.daysAway === 1)
+                              ? 'Tomorrow'
+                              : `in ${item.daysRemaining ?? item.daysAway} days`}
                         </span>
                       </div>
                       <div className="upcoming-meta">
                         <IconClock size={12} />
-                        <span>Due {item.dueDate}</span>
-                        {item.account ? (
+                        <span>Due {item.dueDate || `Day ${item.day}`}</span>
+                        {(item.accountName || item.account?.name) ? (
                           <>
                             <span>·</span>
-                            <span>{item.account.name}</span>
+                            <span>{item.accountName || item.account?.name}</span>
                           </>
                         ) : null}
                       </div>
@@ -564,21 +578,21 @@ export default function Dashboard({
               </button>
             </div>
             <p id="settle-split-desc" className="muted">
-              Record receipt of <strong>+{formatINR(settleTarget.split.owedAmount)}</strong> from <strong>{settleTarget.split.owedBy || 'Friend'}</strong>.
+              Record receipt of <strong>+{formatINR(settleTarget.split?.owedAmount || settleTarget.owedAmount || 0)}</strong> from <strong>{settleTarget.split?.owedBy || settleTarget.owedBy || 'Friend'}</strong>.
             </p>
 
             <div className="settle-summary-card">
               <div className="settle-summary-row">
                 <span>Original Expense:</span>
-                <strong>{settleTarget.category} ({formatINR(settleTarget.amount)})</strong>
+                <strong>{settleTarget.category} ({formatINR(settleTarget.amount || settleTarget.totalAmount || 0)})</strong>
               </div>
               <div className="settle-summary-row">
                 <span>Your Share:</span>
-                <span>{formatINR(settleTarget.split.myShare)}</span>
+                <span>{formatINR(settleTarget.split?.myShare || settleTarget.myShare || 0)}</span>
               </div>
               <div className="settle-summary-row highlight">
                 <span>Reimbursement Amount:</span>
-                <strong className="positive">+{formatINR(settleTarget.split.owedAmount)}</strong>
+                <strong className="positive">+{formatINR(settleTarget.split?.owedAmount || settleTarget.owedAmount || 0)}</strong>
               </div>
             </div>
 

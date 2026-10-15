@@ -544,10 +544,14 @@ export function getTodaySpendingAllowance(summary, expenses = [], now = new Date
   return {
     todayISO: todayISOStr,
     todaySpent,
+    spentToday: todaySpent,
     todayAllowance,
     remainingToday,
     remainingDays,
+    safeDaily: summary?.safeDailySpend || todayAllowance,
+    isPositive: todayAllowance > 0,
     status,
+    normalizedStatus: status === 'on-track' ? 'on_track' : status === 'warning' ? 'caution' : 'over_budget',
   }
 }
 
@@ -577,8 +581,12 @@ export function getUpcomingOutflows(recurringExpenses = [], accounts = [], now =
         amount: schedule.amount,
         day: schedule.day,
         daysAway: diff,
+        daysRemaining: diff,
+        dueDate: `Day ${schedule.day}`,
+        isDueSoon: diff <= 3,
         type: schedule.kind === 'emi' ? 'EMI' : 'Recurring Bill',
         accountId: schedule.accountId,
+        account: targetAcc || null,
         accountName: targetAcc?.name || 'Unassigned Account',
       })
       if (schedule.accountId) {
@@ -600,8 +608,12 @@ export function getUpcomingOutflows(recurringExpenses = [], accounts = [], now =
           amount: acc.outstanding,
           day: acc.dueDay,
           daysAway: diff,
+          daysRemaining: diff,
+          dueDate: `Day ${acc.dueDay}`,
+          isDueSoon: diff <= 3,
           type: 'Credit Card Bill',
           accountId: acc.id,
+          account: acc,
           accountName: acc.name,
         })
       }
@@ -618,8 +630,10 @@ export function getUpcomingOutflows(recurringExpenses = [], accounts = [], now =
       shortfallAlerts.push({
         accountId: acc.id,
         accountName: acc.name,
+        account: acc,
         currentBalance: acc.currentBalance,
         upcomingOutflow: needed,
+        totalDue: needed,
         shortfall: needed - acc.currentBalance,
       })
     }
@@ -628,8 +642,11 @@ export function getUpcomingOutflows(recurringExpenses = [], accounts = [], now =
   return {
     windowDays,
     items,
+    upcoming: items,
     totalOutflow,
+    totalUpcoming: totalOutflow,
     shortfallAlerts,
+    shortfalls: shortfallAlerts,
   }
 }
 
@@ -664,6 +681,7 @@ export function getCreditCardCycleSpend(card, expenses = [], now = new Date()) {
     cycleStart: startISO,
     cycleEnd: endISO,
     cycleSpend,
+    cycleExpenses,
     expenseCount: cycleExpenses.length,
     billingDay,
     dueDay: card.dueDay,
@@ -678,11 +696,14 @@ export function getPendingSplitReceivables(expenses = []) {
   for (const exp of expenses) {
     if (exp.split && !exp.split.settled && exp.split.owedAmount > 0) {
       pending.push({
+        id: exp.id,
         expenseId: exp.id,
         date: exp.date,
         category: exp.category,
         note: exp.note,
+        amount: exp.amount,
         totalAmount: exp.amount,
+        split: exp.split,
         myShare: exp.split.myShare,
         owedAmount: exp.split.owedAmount,
         owedBy: exp.split.owedBy || 'Friend',
@@ -693,6 +714,8 @@ export function getPendingSplitReceivables(expenses = []) {
   const totalOwed = pending.reduce((sum, item) => sum + item.owedAmount, 0)
   return {
     items: pending,
+    receivables: pending,
+    count: pending.length,
     totalOwed,
   }
 }
