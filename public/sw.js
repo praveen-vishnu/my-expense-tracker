@@ -31,8 +31,14 @@ self.addEventListener('fetch', (event) => {
   const { request } = event
   const url = new URL(request.url)
 
-  // Don't intercept API requests or non-GET requests
-  if (request.method !== 'GET' || url.hostname.includes('supabase.co') || url.hostname.includes('googleapis.com')) {
+  // Only handle http/https GET requests originating from our app
+  if (
+    request.method !== 'GET' ||
+    !url.protocol.startsWith('http') ||
+    url.origin !== self.location.origin ||
+    url.hostname.includes('supabase.co') ||
+    url.hostname.includes('googleapis.com')
+  ) {
     return
   }
 
@@ -42,8 +48,8 @@ self.addEventListener('fetch', (event) => {
         if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
           const responseToCache = networkResponse.clone()
           caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, responseToCache)
-          })
+            cache.put(request, responseToCache).catch(() => {})
+          }).catch(() => {})
         }
         return networkResponse
       }).catch(() => {

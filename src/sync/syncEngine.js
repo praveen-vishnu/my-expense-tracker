@@ -89,7 +89,13 @@ export async function pushOutbox(supabase, userId) {
           .from(table)
           .upsert(rowsToUpsert, { onConflict: config.primaryKey })
 
-        if (error) throw error
+        if (error) {
+          if (error.code === 'PGRST205' || error.message?.includes('schema cache')) {
+            console.warn(`Table "${table}" not found in Supabase schema cache. Run migration_v4_sync.sql to create it.`)
+            continue // Keep in outbox, continue with other tables
+          }
+          throw error
+        }
       }
 
       successfullyPushedIds.push(...tableMutations.map((m) => m.outboxId))
@@ -137,7 +143,13 @@ export async function deltaPull(supabase, userId, onRemoteChanges) {
         .gt('updated_at', lastPulledAt)
         .order('updated_at', { ascending: true })
 
-      if (error) throw error
+      if (error) {
+        if (error.code === 'PGRST205' || error.message?.includes('schema cache')) {
+          console.warn(`Table "${table}" not found in Supabase schema cache. Run migration_v4_sync.sql to create it.`)
+          continue
+        }
+        throw error
+      }
       if (!rows || !rows.length) continue
 
       for (const row of rows) {
