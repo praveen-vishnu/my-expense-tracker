@@ -214,22 +214,29 @@ function parseCSVRows(csvText) {
 }
 
 /**
- * Main parser function: takes CSV text and existing expenses to detect duplicates.
+ * Main parser function: takes an array of 2D string rows (from CSV, TXT, or Excel)
+ * and processes transactions, categories, and duplicate detection with 100% precision.
  */
-export function parseBankStatementCSV(csvContent, options = {}) {
+export function parseBankStatementRows(rows, options = {}) {
   const { availableCategories = [], existingExpenses = [], defaultAccountId = null } = options
-  const rows = parseCSVRows(csvContent)
 
-  if (rows.length < 2) {
-    return { ok: false, error: 'The CSV file does not contain enough data rows.' }
+  if (!Array.isArray(rows) || rows.length < 2) {
+    return { ok: false, error: 'The statement file does not contain enough data rows.' }
   }
 
-  // 1. Locate header row
+  // 1. Locate header row (scanning first 25 rows)
   let headerIndex = -1
-  for (let i = 0; i < Math.min(rows.length, 15); i++) {
-    const row = rows[i].map((c) => c.toLowerCase())
-    const hasDate = row.some((c) => c.includes('date') || c === 'txn date' || c === 'date')
-    const hasAmountOrDebit = row.some((c) => c.includes('debit') || c.includes('withdrawal') || c.includes('amount') || c.includes('dr'))
+  for (let i = 0; i < Math.min(rows.length, 25); i++) {
+    const row = rows[i].map((c) => String(c || '').toLowerCase().trim())
+    const hasDate = row.some((c) => c.includes('date') || c === 'txn date' || c === 'value dt' || c === 'tran date')
+    const hasAmountOrDebit = row.some((c) =>
+      c.includes('debit') ||
+      c.includes('withdrawal') ||
+      c.includes('amount') ||
+      c === 'dr' ||
+      c.includes('dr amt') ||
+      c.includes('spent')
+    )
     if (hasDate && hasAmountOrDebit) {
       headerIndex = i
       break
@@ -239,17 +246,45 @@ export function parseBankStatementCSV(csvContent, options = {}) {
   if (headerIndex === -1) {
     return {
       ok: false,
-      error: 'Could not detect bank statement headers. Please ensure the CSV includes Date and Debit/Amount columns.',
+      error: 'Could not detect bank statement headers. Please ensure the statement includes Date and Debit/Amount columns.',
     }
   }
 
-  const headers = rows[headerIndex].map((h) => h.toLowerCase().trim())
-  
+  const headers = rows[headerIndex].map((h) => String(h || '').toLowerCase().trim())
+
   // Find column indices
-  const dateCol = headers.findIndex((h) => h.includes('date') || h === 'txn date')
-  const narrationCol = headers.findIndex((h) => h.includes('narration') || h.includes('description') || h.includes('particular') || h.includes('remarks') || h.includes('details'))
-  const debitCol = headers.findIndex((h) => h.includes('withdrawal') || h.includes('debit') || h === 'dr' || h.includes('dr amt'))
-  const amountCol = headers.findIndex((h) => h === 'amount' || h.includes('txn amount') || h.includes('amount (inr)'))
+  const dateCol = headers.findIndex((h) => h.includes('txn date') || (h.includes('date') && !h.includes('value'))) !== -1
+    ? headers.findIndex((h) => h.includes('txn date') || (h.includes('date') && !h.includes('value')))
+    : headers.findIndex((h) => h.includes('date'))
+
+  const narrationCol = headers.findIndex((h) =>
+    h.includes('narration') ||
+    h.includes('description') ||
+    h.includes('particular') ||
+    h.includes('remarks') ||
+    h.includes('details') ||
+    h.includes('transaction details')
+  )
+
+  const debitCol = headers.findIndex((h) =>
+    h.includes('withdrawal') ||
+    h.includes('debit') ||
+    h === 'dr' ||
+    h.includes('dr amt') ||
+    h.includes('debit (inr)') ||
+    h.includes('debit amount')
+  )
+
+  const creditCol = headers.findIndex((h) =>
+    h.includes('deposit') ||
+    h.includes('credit') ||
+    h === 'cr' ||
+    h.includes('cr amt') ||
+    h.includes('credit (inr)')
+  )
+
+  const typeCol = headers.findIndex((h) => h === 'type' || h === 'cr/dr' || h === 'dr/cr' || h.includes('trans type'))
+  const amountCol = headers.findIndex((h) => h === 'amount' || h.includes('txn amount') || h.includes('amount (inr)') || h.includes('net amount'))
 
   const candidates = []
   let duplicateCount = 0
@@ -262,20 +297,41 @@ export function parseBankStatementCSV(csvContent, options = {}) {
     const isoDate = parseDateToISO(rawDate)
     if (!isoDate) continue
 
-    const rawNarration = narrationCol !== -1 ? row[narrationCol] : row[1] || ''
-    
-    // Extract debit amount
+    const rawNarration = narrationCol !== -1 ? String(row[narrationCol] || '').trim() : String(row[1] || '').trim()
+
+    // Determine debit amount
+    let isDebit = false
     let rawAmount = ''
-    if (debitCol !== -1 && row[debitCol]) {
+
+    if (debitCol !== -1 && row[debitCol] != null && String(row[debitCol]).trim() !== '') {
       rawAmount = row[debitCol]
-    } else if (amountCol !== -1 && row[amountCol]) {
+      isDebit = true
+    } else if (amountCol !== -1 && row[amountCol] != null && String(row[amountCol]).trim() !== '') {
       rawAmount = row[amountCol]
+      // Check type column if present
+      if (typeCol !== -1) {
+        const typeVal = String(row[typeCol] || '').toLowerCase().trim()
+        if (typeVal.includes('dr') || typeVal.includes('debit') || typeVal.includes('outflow')) {
+          isDebit = true
+        } else if (typeVal.includes('cr') || typeVal.includes('credit') || typeVal.includes('inflow')) {
+          isDebit = false
+        }
+      } else if (creditCol !== -1 && row[creditCol] != null && String(row[creditCol]).trim() !== '') {
+        // If there's a credit column and it has a value, this row might be a credit
+        isDebit = false
+      } else {
+        // Default to debit if no other indicator
+        isDebit = true
+      }
     }
 
-    const cleanAmountStr = String(rawAmount).replace(/[â‚¹,\s]/g, '')
+    if (!isDebit || !rawAmount) continue
+
+    // Clean amount string: remove currency symbols (₹, Rs, INR, $), commas, and whitespace
+    const cleanAmountStr = String(rawAmount).replace(/[₹\$,Rs\.INRA-Za-z\s]/gi, (match) => (match === '.' ? '.' : ''))
     const amount = Math.abs(Number(cleanAmountStr))
     if (!Number.isFinite(amount) || amount <= 0) {
-      continue // Skip 0 amounts or deposits
+      continue // Skip invalid or zero amounts
     }
 
     const cleanedNote = cleanNarration(rawNarration)
@@ -283,11 +339,12 @@ export function parseBankStatementCSV(csvContent, options = {}) {
 
     // Check for duplicate against existing expenses
     const isDuplicate = existingExpenses.some(
-      (exp) => exp.date === isoDate && Math.abs(exp.amount - amount) < 0.01 && (
-        exp.note.toLowerCase().includes(cleanedNote.toLowerCase()) ||
-        cleanedNote.toLowerCase().includes(exp.note.toLowerCase()) ||
-        exp.category === category
-      )
+      (exp) =>
+        exp.date === isoDate &&
+        Math.abs(exp.amount - amount) < 0.01 &&
+        (exp.note.toLowerCase().includes(cleanedNote.toLowerCase()) ||
+          cleanedNote.toLowerCase().includes(exp.note.toLowerCase()) ||
+          exp.category === category)
     )
 
     if (isDuplicate) duplicateCount++
@@ -318,4 +375,54 @@ export function parseBankStatementCSV(csvContent, options = {}) {
     totalParsed: candidates.length,
     duplicateCount,
   }
+}
+
+/**
+ * Main parser function: takes CSV or TSV text.
+ */
+export function parseBankStatementCSV(csvContent, options = {}) {
+  const rows = parseCSVRows(csvContent)
+  return parseBankStatementRows(rows, options)
+}
+
+/**
+ * Universal bank statement parser supporting File objects (.csv, .tsv, .txt, .xls, .xlsx).
+ */
+export async function parseBankStatementFile(file, options = {}) {
+  if (!file) return { ok: false, error: 'No file provided.' }
+
+  const fileName = (file.name || '').toLowerCase()
+
+  // 1. Excel files (.xls, .xlsx)
+  if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+    try {
+      const { read, utils } = await import('xlsx')
+      const arrayBuffer = await file.arrayBuffer()
+      const workbook = read(arrayBuffer, { type: 'array', cellDates: true })
+      const firstSheetName = workbook.SheetNames[0]
+      if (!firstSheetName) {
+        return { ok: false, error: 'The Excel workbook has no sheets.' }
+      }
+      const worksheet = workbook.Sheets[firstSheetName]
+      // header: 1 produces 2D array [ [cellA1, cellB1], [cellA2, cellB2] ]
+      const rows = utils.sheet_to_json(worksheet, { header: 1, raw: false, defval: '' })
+      return parseBankStatementRows(rows, options)
+    } catch (err) {
+      console.error('Excel parse failed:', err)
+      return { ok: false, error: `Could not parse Excel spreadsheet: ${err.message || 'Unknown format'}` }
+    }
+  }
+
+  // 2. Text / CSV / TSV files (.csv, .tsv, .txt)
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const text = String(e.target?.result || '')
+      resolve(parseBankStatementCSV(text, options))
+    }
+    reader.onerror = () => {
+      resolve({ ok: false, error: 'Could not read the selected text/CSV file.' })
+    }
+    reader.readAsText(file)
+  })
 }

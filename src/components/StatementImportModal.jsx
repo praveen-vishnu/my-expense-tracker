@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import ModalSheet from './ModalSheet.jsx'
-import { parseBankStatementCSV } from '../utils/csvParser.js'
+import { parseBankStatementFile } from '../utils/csvParser.js'
 import { formatINR, formatShortDate } from '../utils/formatting.js'
 import { IconUpload, IconFileSpreadsheet, IconAlertTriangle, IconCheck } from '@tabler/icons-react'
 
@@ -16,16 +16,16 @@ export default function StatementImportModal({
   const [transactions, setTransactions] = useState(null)
   const [summaryInfo, setSummaryInfo] = useState(null)
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
   const [dragActive, setDragActive] = useState(false)
   const fileInputRef = useRef(null)
 
-  function handleFileSelected(file) {
+  async function handleFileSelected(file) {
     if (!file) return
     setError('')
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      const text = String(e.target?.result || '')
-      const result = parseBankStatementCSV(text, {
+    setLoading(true)
+    try {
+      const result = await parseBankStatementFile(file, {
         availableCategories: categories,
         existingExpenses,
         defaultAccountId: selectedAccountId,
@@ -33,6 +33,7 @@ export default function StatementImportModal({
 
       if (!result.ok) {
         setError(result.error)
+        setLoading(false)
         return
       }
 
@@ -41,11 +42,11 @@ export default function StatementImportModal({
         totalParsed: result.totalParsed,
         duplicateCount: result.duplicateCount,
       })
+    } catch (err) {
+      setError(`Failed to read statement: ${err.message || 'Unknown error'}`)
+    } finally {
+      setLoading(false)
     }
-    reader.onerror = () => {
-      setError('Could not read the selected file.')
-    }
-    reader.readAsText(file)
   }
 
   function handleDrop(e) {
@@ -135,17 +136,26 @@ export default function StatementImportModal({
               }}
               onDragLeave={() => setDragActive(false)}
               onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
+              onClick={() => !loading && fileInputRef.current?.click()}
+              style={loading ? { opacity: 0.6, cursor: 'wait' } : {}}
             >
               <IconFileSpreadsheet size={42} stroke={1.5} style={{ opacity: 0.8 }} />
-              <p><strong>Click to choose a CSV file</strong> or drag and drop here</p>
+              <p>
+                {loading ? (
+                  <strong>Parsing statement transactions...</strong>
+                ) : (
+                  <>
+                    <strong>Click to choose a file</strong> or drag and drop here
+                  </>
+                )}
+              </p>
               <small className="muted">
-                Supports HDFC, SBI, ICICI, Axis, Kotak, and Standard bank statement CSV files
+                Supports Excel (<strong>.xlsx, .xls</strong>), Text (<strong>.txt, .tsv</strong>), and <strong>.csv</strong> statements from HDFC, SBI, ICICI, Axis, Kotak & more
               </small>
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".csv,text/csv,text/comma-separated-values"
+                accept=".csv,.xlsx,.xls,.txt,.tsv,text/csv,text/plain,text/tab-separated-values,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                 hidden
                 onChange={(e) => {
                   if (e.target.files?.[0]) handleFileSelected(e.target.files[0])

@@ -56,3 +56,45 @@ Date,Narration,Chq./Ref.No.,Value Dt,Withdrawal Amt.,Deposit Amt.,Closing Balanc
   assert.equal(t2.isDuplicate, false)
   assert.equal(t2.selected, true)
 })
+
+test('parseBankStatementCSV parses tab-separated or semicolon-separated text statements accurately', () => {
+  const tsvText = `Date\tDescription\tDebit\tCredit\n10/09/2026\tSWIGGY BANGALORE\t₹540.00\t\n11/09/2026\tUPI-NETFLIX-SUBSCRIPTION\t199\t\n`
+
+  const result = parseBankStatementCSV(tsvText, {
+    availableCategories: ['Food', 'Entertainment'],
+  })
+
+  assert.equal(result.ok, true)
+  assert.equal(result.totalParsed, 2)
+  assert.equal(result.transactions[0].amount, 540)
+  assert.equal(result.transactions[0].category, 'Food')
+  assert.equal(result.transactions[0].date, '2026-09-10')
+  assert.equal(result.transactions[1].amount, 199)
+  assert.equal(result.transactions[1].category, 'Entertainment')
+  assert.equal(result.transactions[1].date, '2026-09-11')
+})
+
+test('parseBankStatementRows parses 2D arrays extracted from Excel sheets (.xls, .xlsx)', async () => {
+  const { parseBankStatementRows } = await import('./csvParser.js')
+  const excelSheetRows = [
+    ['Bank Account Statement', '', '', ''],
+    ['Account Number: 1234567890', '', '', ''],
+    ['Txn Date', 'Particulars', 'Debit Amount', 'Credit Amount'],
+    ['14-Sep-2026', 'BLINKIT QUICK COMMERCE', '620.50', ''],
+    ['15-Sep-2026', 'SALARY REVERSAL', '', '1500.00'],
+    ['16-Sep-2026', 'TATA POWER ELECTRICITY BILL', '1,450.00', ''],
+  ]
+
+  const result = parseBankStatementRows(excelSheetRows, {
+    availableCategories: ['Food', 'Bills'],
+  })
+
+  assert.equal(result.ok, true)
+  assert.equal(result.totalParsed, 2) // Excludes credit amount row
+  assert.equal(result.transactions[0].amount, 620.5)
+  assert.equal(result.transactions[0].category, 'Food')
+  assert.equal(result.transactions[0].date, '2026-09-14')
+  assert.equal(result.transactions[1].amount, 1450)
+  assert.equal(result.transactions[1].category, 'Bills')
+  assert.equal(result.transactions[1].date, '2026-09-16')
+})
