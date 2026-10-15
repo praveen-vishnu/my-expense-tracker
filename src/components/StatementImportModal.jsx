@@ -158,7 +158,9 @@ export default function StatementImportModal({
                 accept=".csv,.xlsx,.xls,.txt,.tsv,text/csv,text/plain,text/tab-separated-values,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                 hidden
                 onChange={(e) => {
-                  if (e.target.files?.[0]) handleFileSelected(e.target.files[0])
+                  const file = e.target.files?.[0]
+                  e.target.value = ''
+                  if (file) handleFileSelected(file)
                 }}
               />
             </div>

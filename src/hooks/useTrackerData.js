@@ -22,11 +22,19 @@ export function useTrackerData(authReady, authUser, month) {
   const [legacySyncStatus, setLegacySyncStatus] = useState('checking')
   const saveTimeoutRef = useRef(null)
   const isInitialLoadRef = useRef(true)
+  const loadedUserIdRef = useRef(null)
   const dataRef = useRef(data)
+  const monthRef = useRef(month)
+
+  const userId = authUser?.id
 
   useEffect(() => {
     dataRef.current = data
   }, [data])
+
+  useEffect(() => {
+    monthRef.current = month
+  }, [month])
 
   // Handle remote deltas coming from deltaPull
   const handleRemoteChange = useCallback(({ table, id, record, isDeleted }) => {
@@ -96,7 +104,7 @@ export function useTrackerData(authReady, authUser, month) {
     return subscribeSyncStatus((status) => {
       setSyncInfo(status)
       if (status.state === 'synced') {
-        setLegacySyncStatus(isSupabaseConfigured && authUser ? 'cloud' : 'local')
+        setLegacySyncStatus(isSupabaseConfigured && userId ? 'cloud' : 'local')
       } else if (status.state === 'syncing') {
         setLegacySyncStatus('saving')
       } else if (status.state === 'pending') {
@@ -105,49 +113,59 @@ export function useTrackerData(authReady, authUser, month) {
         setLegacySyncStatus('error')
       }
     })
-  }, [authUser])
+  }, [userId])
 
-  // 1. Initial Load & Setup Auto-Sync
+  // 1. Initial Load (Runs once when authenticated; never re-triggers or resets ready on focus or month change)
   useEffect(() => {
-    if (!authReady || !authUser) return undefined
+    if (!authReady || !userId) return undefined
+    // If this exact user is already loaded in memory, do NOT reset ready or unmount UI
+    if (loadedUserIdRef.current === userId) return undefined
+
     let active = true
     setReady(false)
     setLegacySyncStatus('checking')
 
     loadData().then(async (loadedData) => {
       if (!active) return
-      const withRecurring = addRecurringExpenses(loadedData, month)
+      const withRecurring = addRecurringExpenses(loadedData, monthRef.current)
       setData(withRecurring)
+      loadedUserIdRef.current = userId
       setReady(true)
       isInitialLoadRef.current = false
 
-      if (isSupabaseConfigured && supabase && authUser?.id) {
+      if (isSupabaseConfigured && supabase && userId) {
         // Run one-time backfill if per-row tables are empty
-        await backfillNormalizedTables(supabase, authUser.id, withRecurring)
+        await backfillNormalizedTables(supabase, userId, withRecurring)
         // Run initial delta pull & outbox flush
-        await sync(supabase, authUser.id, handleRemoteChange)
+        await sync(supabase, userId, handleRemoteChange)
       }
     })
 
+    return () => {
+      active = false
+    }
+  }, [authReady, userId, handleRemoteChange])
+
+  // 2. Setup Auto-Sync (runs silently in the background on focus, visibility change, and online events)
+  useEffect(() => {
+    if (!authReady || !userId) return undefined
+
     const cleanupAutoSync = initAutoSync(
       () => supabase,
-      () => authUser?.id,
+      () => userId,
       handleRemoteChange
     )
 
-    return () => {
-      active = false
-      cleanupAutoSync()
-    }
-  }, [authReady, authUser, handleRemoteChange, month])
+    return cleanupAutoSync
+  }, [authReady, userId, handleRemoteChange])
 
-  // 2. Materialize recurring expenses when month changes
+  // 3. Materialize recurring expenses when month changes (smoothly in memory, no unmounting)
   useEffect(() => {
     if (!ready) return
     setData((current) => addRecurringExpenses(current, month))
   }, [month, ready])
 
-  // 3. Debounced Snapshot Backup Effect
+  // 4. Debounced Snapshot Backup Effect
   useEffect(() => {
     if (!ready || isInitialLoadRef.current) return
 
@@ -157,8 +175,8 @@ export function useTrackerData(authReady, authUser, month) {
 
     saveTimeoutRef.current = setTimeout(() => {
       saveData(dataRef.current).then(() => {
-        if (isSupabaseConfigured && supabase && authUser?.id) {
-          pushOutbox(supabase, authUser.id)
+        if (isSupabaseConfigured && supabase && userId) {
+          pushOutbox(supabase, userId)
         }
       })
     }, DEBOUNCE_SAVE_MS)
@@ -168,7 +186,7 @@ export function useTrackerData(authReady, authUser, month) {
         clearTimeout(saveTimeoutRef.current)
       }
     }
-  }, [data, ready, authUser])
+  }, [data, ready, userId])
 
   // Mutation Handlers
   const upsertExpense = useCallback((fields, existingId) => {

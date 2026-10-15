@@ -291,7 +291,11 @@ export default function ReceiptScannerModal({
               type="file"
               accept="image/*"
               style={{ display: 'none' }}
-              onChange={(e) => handleFileSelected(e.target.files?.[0])}
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                e.target.value = ''
+                if (file) handleFileSelected(file)
+              }}
             />
           </div>
         ) : (

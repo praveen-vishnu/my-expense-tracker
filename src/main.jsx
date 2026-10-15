@@ -16,19 +16,8 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator && import.meta
   window.addEventListener('load', () => {
     navigator.serviceWorker
       .register('/sw.js')
-      .then((reg) => {
-        reg.update()
-      })
       .catch((err) => {
         console.warn('ServiceWorker registration failed:', err)
       })
-  })
-
-  let refreshing = false
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!refreshing) {
-      refreshing = true
-      window.location.reload()
-    }
   })
 }

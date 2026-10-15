@@ -38,7 +38,14 @@ export function useAuth() {
         supabase.auth.signOut()
         setAuthUser(null)
       } else {
-        setAuthUser(user || null)
+        const nextUser = user || null
+        setAuthUser((prev) => {
+          if (!prev && !nextUser) return null
+          if (prev && nextUser && prev.id === nextUser.id && prev.email === nextUser.email) {
+            return prev
+          }
+          return nextUser
+        })
       }
       setAuthReady(true)
     })
@@ -48,7 +55,14 @@ export function useAuth() {
       if (event === 'PASSWORD_RECOVERY') {
         setPasswordRecovery(true)
       }
-      setAuthUser(session?.user?.is_anonymous ? null : session?.user || null)
+      const nextUser = session?.user?.is_anonymous ? null : session?.user || null
+      setAuthUser((prev) => {
+        if (!prev && !nextUser) return null
+        if (prev && nextUser && prev.id === nextUser.id && prev.email === nextUser.email) {
+          return prev
+        }
+        return nextUser
+      })
     })
 
     return () => {
