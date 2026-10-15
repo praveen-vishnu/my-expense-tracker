@@ -70,7 +70,8 @@ export async function pushOutbox(supabase, userId) {
       const deletes = []
 
       for (const m of tableMutations) {
-        if (m.op === 'delete') {
+        // If operation is delete OR if payload is empty/tombstone-only, route to soft-delete UPDATE
+        if (m.op === 'delete' || !m.payload || (!m.payload.name && m.table === 'accounts')) {
           deletes.push(m)
         } else if (m.op === 'upsert' && m.payload) {
           const row = config.toRow(m.payload, userId)
