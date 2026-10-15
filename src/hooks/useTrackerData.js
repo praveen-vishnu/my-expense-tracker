@@ -10,6 +10,7 @@ import {
   initAutoSync,
   subscribeSyncStatus,
   getSyncStatus,
+  backfillNormalizedTables,
 } from '../sync/syncEngine.js'
 
 const DEBOUNCE_SAVE_MS = 350
@@ -121,6 +122,8 @@ export function useTrackerData(authReady, authUser, month) {
       isInitialLoadRef.current = false
 
       if (isSupabaseConfigured && supabase && authUser?.id) {
+        // Run one-time backfill if per-row tables are empty
+        await backfillNormalizedTables(supabase, authUser.id, withRecurring)
         // Run initial delta pull & outbox flush
         await sync(supabase, authUser.id, handleRemoteChange)
       }
@@ -230,12 +233,16 @@ export function useTrackerData(authReady, authUser, month) {
   const updateBatchExpenses = useCallback((expenseIds, fields) => {
     if (!Array.isArray(expenseIds) || !expenseIds.length || !fields) return
     const idSet = new Set(expenseIds)
+    const currentExpenses = dataRef.current?.expenses || []
+    for (const item of currentExpenses) {
+      if (idSet.has(item.id)) {
+        enqueueMutation({ table: 'expenses', id: item.id, op: 'upsert', payload: { ...item, ...fields } })
+      }
+    }
     setData((current) => {
       const updatedExpenses = current.expenses.map((item) => {
         if (!idSet.has(item.id)) return item
-        const updated = { ...item, ...fields }
-        enqueueMutation({ table: 'expenses', id: item.id, op: 'upsert', payload: updated })
-        return updated
+        return { ...item, ...fields }
       })
       return { ...current, expenses: updatedExpenses }
     })
@@ -310,10 +317,24 @@ export function useTrackerData(authReady, authUser, month) {
   }, [])
 
   const settleSplitExpense = useCallback((expenseId, settledAccountId, settledDate = new Date().toISOString().slice(0, 10)) => {
+    const existing = dataRef.current?.expenses?.find((e) => e.id === expenseId)
+    if (existing && existing.split) {
+      const updated = {
+        ...existing,
+        split: {
+          ...existing.split,
+          settled: true,
+          settledDate,
+          settledAccountId: settledAccountId || null,
+        },
+      }
+      enqueueMutation({ table: 'expenses', id: existing.id, op: 'upsert', payload: updated })
+    }
+
     setData((current) => {
       const updatedExpenses = current.expenses.map((e) => {
         if (e.id !== expenseId || !e.split) return e
-        const updated = {
+        return {
           ...e,
           split: {
             ...e.split,
@@ -322,8 +343,6 @@ export function useTrackerData(authReady, authUser, month) {
             settledAccountId: settledAccountId || null,
           },
         }
-        enqueueMutation({ table: 'expenses', id: e.id, op: 'upsert', payload: updated })
-        return updated
       })
       return { ...current, expenses: updatedExpenses }
     })
@@ -399,24 +418,22 @@ export function useTrackerData(authReady, authUser, month) {
 
   const copyCategoryBudgets = useCallback((fromMonth, toMonth) => {
     if (!fromMonth || !toMonth) return
-    setData((current) => {
-      const source = current.categoryBudgets?.[fromMonth] || {}
-      for (const [cat, amt] of Object.entries(source)) {
-        enqueueMutation({
-          table: 'category_budgets',
-          id: `${toMonth}_${cat}`,
-          op: 'upsert',
-          payload: { id: `${toMonth}_${cat}`, month: toMonth, category: cat, amount: amt },
-        })
-      }
-      return {
-        ...current,
-        categoryBudgets: {
-          ...(current.categoryBudgets || {}),
-          [toMonth]: { ...source },
-        },
-      }
-    })
+    const source = dataRef.current?.categoryBudgets?.[fromMonth] || {}
+    for (const [cat, amt] of Object.entries(source)) {
+      enqueueMutation({
+        table: 'category_budgets',
+        id: `${toMonth}_${cat}`,
+        op: 'upsert',
+        payload: { id: `${toMonth}_${cat}`, month: toMonth, category: cat, amount: amt },
+      })
+    }
+    setData((current) => ({
+      ...current,
+      categoryBudgets: {
+        ...(current.categoryBudgets || {}),
+        [toMonth]: { ...(current.categoryBudgets?.[fromMonth] || {}) },
+      },
+    }))
   }, [])
 
   const addRecurringExpense = useCallback((schedule) => {
@@ -466,17 +483,19 @@ export function useTrackerData(authReady, authUser, month) {
   }, [])
 
   const updateAccount = useCallback((accountId, fields) => {
+    const existing = dataRef.current?.accounts?.find((a) => a.id === accountId)
+    if (existing) {
+      enqueueMutation({
+        table: 'accounts',
+        id: accountId,
+        op: 'upsert',
+        payload: { ...existing, ...fields },
+      })
+    }
     setData((current) => {
       const updatedAccounts = (current.accounts || []).map((acc) => {
         if (acc.id !== accountId) return acc
-        const updated = { ...acc, ...fields }
-        enqueueMutation({
-          table: 'accounts',
-          id: accountId,
-          op: 'upsert',
-          payload: updated,
-        })
-        return updated
+        return { ...acc, ...fields }
       })
       return { ...current, accounts: updatedAccounts }
     })
@@ -484,21 +503,26 @@ export function useTrackerData(authReady, authUser, month) {
 
   const deleteAccount = useCallback((accountId) => {
     enqueueMutation({ table: 'accounts', id: accountId, op: 'delete' })
+    const accounts = dataRef.current?.accounts || []
+    const remaining = accounts.filter((acc) => acc.id !== accountId)
+    if (remaining.length && !remaining.some((a) => a.isDefault)) {
+      enqueueMutation({
+        table: 'accounts',
+        id: remaining[0].id,
+        op: 'upsert',
+        payload: { ...remaining[0], isDefault: true },
+      })
+    }
+
     setData((current) => {
-      const remaining = (current.accounts || []).filter((acc) => acc.id !== accountId)
-      // Fix: immutable update for default account
-      if (remaining.length && !remaining.some((a) => a.isDefault)) {
-        remaining[0] = { ...remaining[0], isDefault: true }
-        enqueueMutation({
-          table: 'accounts',
-          id: remaining[0].id,
-          op: 'upsert',
-          payload: remaining[0],
-        })
+      const currRemaining = (current.accounts || []).filter((acc) => acc.id !== accountId)
+      let finalAccounts = currRemaining
+      if (currRemaining.length && !currRemaining.some((a) => a.isDefault)) {
+        finalAccounts = currRemaining.map((a, idx) => (idx === 0 ? { ...a, isDefault: true } : a))
       }
       return {
         ...current,
-        accounts: remaining,
+        accounts: finalAccounts,
         expenses: current.expenses.map((e) =>
           e.accountId === accountId ? { ...e, accountId: null } : e
         ),
@@ -544,18 +568,20 @@ export function useTrackerData(authReady, authUser, month) {
   }, [])
 
   const setDefaultAccount = useCallback((accountId) => {
-    setData((current) => {
-      const updatedAccounts = (current.accounts || []).map((acc) => {
-        const isDefault = acc.id === accountId
-        const updated = { ...acc, isDefault }
-        enqueueMutation({
-          table: 'accounts',
-          id: acc.id,
-          op: 'upsert',
-          payload: updated,
-        })
-        return updated
+    const accounts = dataRef.current?.accounts || []
+    for (const acc of accounts) {
+      enqueueMutation({
+        table: 'accounts',
+        id: acc.id,
+        op: 'upsert',
+        payload: { ...acc, isDefault: acc.id === accountId },
       })
+    }
+    setData((current) => {
+      const updatedAccounts = (current.accounts || []).map((acc) => ({
+        ...acc,
+        isDefault: acc.id === accountId,
+      }))
       return { ...current, accounts: updatedAccounts }
     })
   }, [])

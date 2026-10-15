@@ -86,7 +86,7 @@ test('pushOutbox batches upserts and clears outbox with fake Supabase client', a
   assert.equal(getSyncStatus().state, 'synced')
 })
 
-test('pushOutbox formats delete operations as tombstones', async () => {
+test('pushOutbox executes update({ deleted_at }) for delete operations', async () => {
   await clearOutbox()
 
   await enqueueMutation({
@@ -95,24 +95,91 @@ test('pushOutbox formats delete operations as tombstones', async () => {
     op: 'delete',
   })
 
-  let capturedRows = null
+  let updateCalled = false
+  let updatedFields = null
+  let eqFilters = {}
+
   const fakeSupabase = {
-    from() {
+    from(table) {
+      assert.equal(table, 'accounts')
       return {
-        upsert(rows) {
-          capturedRows = rows
-          return Promise.resolve({ error: null })
+        update(fields) {
+          updateCalled = true
+          updatedFields = fields
+          const query = {
+            eq(col, val) {
+              eqFilters[col] = val
+              return query
+            },
+            then(resolve) {
+              return resolve({ error: null })
+            },
+          }
+          return query
         },
       }
     },
   }
 
-  await pushOutbox(fakeSupabase, 'user_123')
-  assert.ok(capturedRows)
-  assert.equal(capturedRows.length, 1)
-  assert.equal(capturedRows[0].id, 'acc_old')
-  assert.equal(capturedRows[0].user_id, 'user_123')
-  assert.ok(capturedRows[0].deleted_at)
+  const res = await pushOutbox(fakeSupabase, 'user_123')
+  assert.equal(res.success, true)
+  assert.equal(updateCalled, true)
+  assert.ok(updatedFields.deleted_at)
+  assert.equal(eqFilters.user_id, 'user_123')
+  assert.equal(eqFilters.id, 'acc_old')
+
+  const pending = await getPendingMutations()
+  assert.equal(pending.length, 0)
+})
+
+test('Outbox coalesces multiple mutations on the same entity and preserves monotonic sequence', async () => {
+  await clearOutbox()
+
+  // 1. Initial upsert
+  const m1 = await enqueueMutation({
+    table: 'expenses',
+    id: 'exp_coalesce',
+    op: 'upsert',
+    payload: { id: 'exp_coalesce', amount: 100, category: 'Food' },
+  })
+
+  // 2. Another table
+  const m2 = await enqueueMutation({
+    table: 'accounts',
+    id: 'acc_test',
+    op: 'upsert',
+    payload: { id: 'acc_test', name: 'Bank' },
+  })
+
+  // 3. Edit to the same expense
+  const m3 = await enqueueMutation({
+    table: 'expenses',
+    id: 'exp_coalesce',
+    op: 'upsert',
+    payload: { id: 'exp_coalesce', amount: 250, category: 'Food' },
+  })
+
+  const pending = await getPendingMutations()
+  assert.equal(pending.length, 2, 'Should coalesce mutations on exp_coalesce into 1 entry')
+  assert.equal(pending[0].seq < pending[1].seq, true)
+
+  const expenseEntry = pending.find((p) => p.id === 'exp_coalesce')
+  assert.equal(expenseEntry.payload.amount, 250)
+
+  // 4. Delete on the same expense coalesces into delete
+  await enqueueMutation({
+    table: 'expenses',
+    id: 'exp_coalesce',
+    op: 'delete',
+  })
+
+  const pendingAfterDel = await getPendingMutations()
+  assert.equal(pendingAfterDel.length, 2)
+  const delEntry = pendingAfterDel.find((p) => p.id === 'exp_coalesce')
+  assert.equal(delEntry.op, 'delete')
+  assert.equal(delEntry.payload, null)
+
+  await clearOutbox()
 })
 
 test('deltaPull applies remote changes and tombstones', async () => {
@@ -148,10 +215,14 @@ test('deltaPull applies remote changes and tombstones', async () => {
                 gt() {
                   return {
                     order() {
-                      if (table === 'expenses') {
-                        return Promise.resolve({ data: remoteRows, error: null })
+                      return {
+                        range() {
+                          if (table === 'expenses') {
+                            return Promise.resolve({ data: remoteRows, error: null })
+                          }
+                          return Promise.resolve({ data: [], error: null })
+                        },
                       }
-                      return Promise.resolve({ data: [], error: null })
                     },
                   }
                 },
