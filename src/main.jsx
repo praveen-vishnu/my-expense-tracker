@@ -14,8 +14,21 @@ createRoot(document.getElementById('root')).render(
 
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((err) => {
-      console.warn('ServiceWorker registration failed:', err)
-    })
+    navigator.serviceWorker
+      .register('/sw.js')
+      .then((reg) => {
+        reg.update()
+      })
+      .catch((err) => {
+        console.warn('ServiceWorker registration failed:', err)
+      })
+  })
+
+  let refreshing = false
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!refreshing) {
+      refreshing = true
+      window.location.reload()
+    }
   })
 }
