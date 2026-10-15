@@ -1,6 +1,7 @@
-import { useRef, useState } from 'react'
-import { isValidDate, parseAmount, todayISO } from '../utils/formatting.js'
+import { useRef, useState, useMemo } from 'react'
+import { isValidDate, parseAmount, todayISO, formatINR } from '../utils/formatting.js'
 import ModalSheet from './ModalSheet.jsx'
+import { IconUsers, IconCalculator } from '@tabler/icons-react'
 
 export default function ExpenseForm({
   categories,
@@ -17,10 +18,53 @@ export default function ExpenseForm({
   const defaultAccId = accounts.find((a) => a.isDefault)?.id || accounts[0]?.id || ''
   const [accountId, setAccountId] = useState(initial?.accountId || defaultAccId)
 
+  // Split expense states
+  const [isSplit, setIsSplit] = useState(Boolean(initial?.split))
+  const [myShare, setMyShare] = useState(initial?.split?.myShare != null ? String(initial.split.myShare) : '')
+  const [owedBy, setOwedBy] = useState(initial?.split?.owedBy || '')
+
   const [error, setError] = useState(null)
   const amountRef = useRef(null)
   const categoryRef = useRef(null)
   const dateRef = useRef(null)
+
+  // In-line math preview
+  const mathPreview = useMemo(() => {
+    if (!amount || (!amount.includes('+') && !amount.includes('-') && !amount.includes('*') && !amount.includes('/'))) {
+      return null
+    }
+    const evaluated = parseAmount(amount)
+    return Number.isFinite(evaluated) && evaluated > 0 ? evaluated : null
+  }, [amount])
+
+  // Calculated split amount
+  const parsedTotal = parseAmount(amount) || 0
+  const parsedMyShare = parseAmount(myShare) || 0
+  const calculatedOwed = Math.max(parsedTotal - parsedMyShare, 0)
+
+  // Quick logging presets
+  const presets = [
+    { label: 'Chai / Coffee', amount: 30, category: categories.find((c) => /food|dine|dining|chai/i.test(c)) || categories[0], note: 'Tea / Coffee' },
+    { label: 'Auto / Cab', amount: 120, category: categories.find((c) => /travel|transport|commute/i.test(c)) || categories[0], note: 'Commute' },
+    { label: 'Groceries', amount: 350, category: categories.find((c) => /grocery|groceries|kirana/i.test(c)) || categories[0], note: 'Quick Groceries' },
+    { label: 'Lunch / Dinner', amount: 450, category: categories.find((c) => /food|dine|dining/i.test(c)) || categories[0], note: 'Meal' },
+  ]
+
+  function applyPreset(preset) {
+    setAmount(String(preset.amount))
+    if (preset.category) setCategory(preset.category)
+    if (preset.note) setNote(preset.note)
+  }
+
+  function handleAmountChange(val) {
+    setAmount(val)
+    if (isSplit && (!myShare || parseAmount(myShare) === parsedTotal / 2)) {
+      const num = parseAmount(val)
+      if (Number.isFinite(num) && num > 0) {
+        setMyShare(String(Math.round(num / 2)))
+      }
+    }
+  }
 
   function handleSubmit(event) {
     event.preventDefault()
@@ -40,13 +84,32 @@ export default function ExpenseForm({
       dateRef.current?.focus()
       return
     }
-    setError('')
+
+    if (isSplit) {
+      const shareVal = parseAmount(myShare)
+      if (!Number.isFinite(shareVal) || shareVal < 0 || shareVal > value) {
+        setError({ field: 'split', message: 'Your share must be between 0 and the total amount.' })
+        return
+      }
+    }
+
+    setError(null)
     onSave({
       amount: value,
       category,
       date,
       note: note.trim(),
       accountId: accountId || null,
+      split: isSplit
+        ? {
+            myShare: parseAmount(myShare) || 0,
+            owedAmount: calculatedOwed,
+            owedBy: owedBy.trim() || 'Friend',
+            settled: initial?.split?.settled || false,
+            settledDate: initial?.split?.settledDate || null,
+            settledAccountId: initial?.split?.settledAccountId || null,
+          }
+        : null,
     })
   }
 
@@ -62,20 +125,46 @@ export default function ExpenseForm({
           </button>
         </div>
 
+        {/* 1-TAP FREQUENT PRESETS */}
+        {!isEdit ? (
+          <div className="quick-presets-strip">
+            <span className="preset-label">Quick Presets:</span>
+            <div className="preset-chips">
+              {presets.map((p) => (
+                <button
+                  key={p.label}
+                  type="button"
+                  className="preset-chip"
+                  onClick={() => applyPreset(p)}
+                >
+                  {p.label} <small>₹{p.amount}</small>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         <label className="field">
-          <span>Amount</span>
+          <span className="field-label-row">
+            <span>Amount</span>
+            {mathPreview != null ? (
+              <span className="math-preview-pill">
+                <IconCalculator size={13} /> = {formatINR(mathPreview)}
+              </span>
+            ) : null}
+          </span>
           <div className="amount-input">
             <span>₹</span>
             <input
               ref={amountRef}
               type="text"
-              inputMode="decimal"
+              inputMode="text"
               required
               aria-invalid={error?.field === 'amount'}
               aria-describedby={error?.field === 'amount' ? 'expense-form-error' : undefined}
               value={amount}
-              onChange={(event) => setAmount(event.target.value)}
-              placeholder="450"
+              onChange={(event) => handleAmountChange(event.target.value)}
+              placeholder="e.g. 450 or 250 + 80"
             />
           </div>
         </label>
@@ -133,10 +222,66 @@ export default function ExpenseForm({
             type="text"
             value={note}
             onChange={(event) => setNote(event.target.value)}
-            placeholder="Lunch"
+            placeholder="Lunch / Kirana / Fuel"
             maxLength={80}
           />
         </label>
+
+        {/* SPLIT BILL SECTION */}
+        <div className="split-expense-container">
+          <label className="split-toggle-label">
+            <input
+              type="checkbox"
+              checked={isSplit}
+              onChange={(e) => {
+                const next = e.target.checked
+                setIsSplit(next)
+                if (next && !myShare && parsedTotal > 0) {
+                  setMyShare(String(Math.round(parsedTotal / 2)))
+                }
+              }}
+            />
+            <span className="split-toggle-text">
+              <IconUsers size={16} />
+              <span>Split with friends / Reimbursable</span>
+            </span>
+          </label>
+
+          {isSplit ? (
+            <div className="split-details-card">
+              <div className="split-inputs-row">
+                <label className="field">
+                  <span>My Share</span>
+                  <div className="amount-input">
+                    <span>₹</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={myShare}
+                      onChange={(e) => setMyShare(e.target.value)}
+                      placeholder="My portion"
+                    />
+                  </div>
+                </label>
+
+                <label className="field">
+                  <span>Owed By</span>
+                  <input
+                    type="text"
+                    value={owedBy}
+                    onChange={(e) => setOwedBy(e.target.value)}
+                    placeholder="Friend's Name"
+                  />
+                </label>
+              </div>
+
+              <div className="split-summary-pill">
+                <span>Friend owes: <strong>{formatINR(calculatedOwed)}</strong></span>
+                <small>Only your share ({formatINR(parsedMyShare)}) counts toward budget</small>
+              </div>
+            </div>
+          ) : null}
+        </div>
 
         {error ? <p id="expense-form-error" className="form-error" role="alert">{error.message}</p> : null}
 
@@ -147,4 +292,3 @@ export default function ExpenseForm({
     </ModalSheet>
   )
 }
-

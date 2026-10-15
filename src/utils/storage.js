@@ -16,6 +16,7 @@ export function emptyData() {
     version: DATA_VERSION,
     income: {},
     incomeAccounts: {},
+    incomeSources: [],
     budgets: {},
     categoryBudgets: {},
     recurringExpenses: [],
@@ -200,6 +201,27 @@ function normalizeTransfers(transfers) {
     }))
 }
 
+function normalizeIncomeSources(incomeSources) {
+  if (!Array.isArray(incomeSources)) return []
+  return incomeSources
+    .filter((s) => (
+      s &&
+      typeof s.id === 'string' && s.id &&
+      typeof s.name === 'string' && s.name.trim() &&
+      typeof s.amount === 'number' && Number.isFinite(s.amount) && s.amount > 0 &&
+      typeof s.date === 'string' && isValidDate(s.date) &&
+      isValidMonthKey(s.monthKey || s.date.slice(0, 7))
+    ))
+    .map((s) => ({
+      id: s.id,
+      name: s.name.trim(),
+      amount: s.amount,
+      date: s.date,
+      monthKey: s.monthKey || s.date.slice(0, 7),
+      accountId: typeof s.accountId === 'string' && s.accountId ? s.accountId : null,
+    }))
+}
+
 export function normalizeData(raw) {
   if (!raw || typeof raw !== 'object') return emptyData()
 
@@ -212,6 +234,18 @@ export function normalizeData(raw) {
         note: expense.note ? String(expense.note) : '',
         ...(typeof expense.accountId === 'string' ? { accountId: expense.accountId } : {}),
         ...(typeof expense.recurringId === 'string' ? { recurringId: expense.recurringId } : {}),
+        ...(expense.split && typeof expense.split === 'object'
+          ? {
+              split: {
+                myShare: Number.isFinite(Number(expense.split.myShare)) ? Number(expense.split.myShare) : expense.amount,
+                owedAmount: Number.isFinite(Number(expense.split.owedAmount)) ? Number(expense.split.owedAmount) : 0,
+                owedBy: typeof expense.split.owedBy === 'string' ? expense.split.owedBy.trim() : '',
+                settled: Boolean(expense.split.settled),
+                settledDate: typeof expense.split.settledDate === 'string' ? expense.split.settledDate : null,
+                settledAccountId: typeof expense.split.settledAccountId === 'string' ? expense.split.settledAccountId : null,
+              },
+            }
+          : {}),
       }))
     : []
 
@@ -219,6 +253,7 @@ export function normalizeData(raw) {
     version: DATA_VERSION,
     income: normalizeIncome(raw.income),
     incomeAccounts: normalizeIncomeAccounts(raw.incomeAccounts),
+    incomeSources: normalizeIncomeSources(raw.incomeSources),
     budgets: normalizeBudgets(raw.budgets),
     categoryBudgets: normalizeCategoryBudgets(raw.categoryBudgets),
     recurringExpenses: normalizeRecurringExpenses(raw.recurringExpenses),

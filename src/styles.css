@@ -3786,8 +3786,651 @@ h2 {
   border-color: rgba(157, 219, 193, 0.2);
 }
 
+/* ==========================================================================
+   ENHANCED REAL-WORLD FEATURES STYLES
+   ========================================================================== */
 
+/* 1. Quick Presets Strip & Math Preview */
+.preset-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+}
 
+.preset-pill {
+  appearance: none;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 500;
+  padding: 0.22rem 0.65rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
 
+.preset-pill:hover {
+  background: var(--sage);
+  border-color: var(--pine);
+}
 
+.preset-pill.active {
+  background: var(--pine);
+  color: var(--pine-ink);
+  border-color: var(--pine);
+  font-weight: 600;
+}
 
+.math-preview-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.35rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 6px;
+  background: rgba(15, 102, 91, 0.08);
+  border: 1px solid rgba(15, 102, 91, 0.2);
+  color: #0f665b;
+  font-size: 0.82rem;
+  font-weight: 600;
+  width: fit-content;
+}
+
+/* 2. Split Bill Controls */
+.split-bill-section {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm, 10px);
+  padding: 0.75rem 0.9rem;
+  margin-top: 0.5rem;
+}
+
+.split-bill-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.split-bill-toggle input[type="checkbox"] {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--pine);
+  cursor: pointer;
+}
+
+.split-bill-box {
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px dashed var(--line);
+}
+
+.split-summary-badge {
+  background: rgba(15, 102, 91, 0.06);
+  border: 1px solid rgba(15, 102, 91, 0.16);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  margin-top: 0.6rem;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+/* 3. Multi-Source Income */
+.income-total-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, rgba(15, 102, 91, 0.12), rgba(15, 102, 91, 0.04));
+  border: 1px solid rgba(15, 102, 91, 0.25);
+  border-radius: var(--radius, 12px);
+  padding: 0.9rem 1.1rem;
+  margin-bottom: 0.9rem;
+}
+
+.income-total-label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.income-total-val {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #0f665b;
+}
+
+.income-total-icon {
+  color: #0f665b;
+  opacity: 0.85;
+}
+
+.stream-convert-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  background: rgba(195, 145, 83, 0.1);
+  border: 1px solid rgba(195, 145, 83, 0.25);
+  border-radius: 8px;
+  padding: 0.65rem 0.85rem;
+  margin-bottom: 0.9rem;
+  font-size: 0.84rem;
+}
+
+.income-sources-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-bottom: 1rem;
+}
+
+.income-sources-list h4 {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  margin-bottom: 0.2rem;
+}
+
+.income-source-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+}
+
+.income-source-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.income-source-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.income-source-date {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.income-source-account {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.income-source-right {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.income-source-amount {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #0f665b;
+}
+
+.icon-btn-danger {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--danger, #d9534f);
+  cursor: pointer;
+  padding: 0.3rem;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease;
+}
+
+.icon-btn-danger:hover {
+  background: rgba(217, 83, 79, 0.12);
+}
+
+.add-stream-card {
+  background: var(--paper);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius, 12px);
+  padding: 0.9rem;
+}
+
+.add-stream-card h4 {
+  font-size: 0.9rem;
+  margin-bottom: 0.6rem;
+}
+
+/* 4. Today's Pocket Allowance Widget */
+.allowance-card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius, 14px);
+  padding: 1.15rem;
+  margin-bottom: 1.25rem;
+  box-shadow: var(--shadow);
+  position: relative;
+  overflow: hidden;
+}
+
+.allowance-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+}
+
+.allowance-on_track::before {
+  background: #0f665b;
+}
+
+.allowance-caution::before {
+  background: #c39153;
+}
+
+.allowance-over_budget::before {
+  background: #d9534f;
+}
+
+.allowance-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  margin-bottom: 1rem;
+}
+
+@media (min-width: 600px) {
+  .allowance-main {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.allowance-label-group {
+  max-width: 480px;
+}
+
+.allowance-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-bottom: 0.25rem;
+}
+
+.allowance-sub {
+  font-size: 0.84rem;
+  color: var(--muted);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.allowance-hero {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.allowance-val {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.allowance-status-pill {
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.allowance-status-pill.status-on_track {
+  background: rgba(15, 102, 91, 0.12);
+  color: #0f665b;
+}
+
+.allowance-status-pill.status-caution {
+  background: rgba(195, 145, 83, 0.15);
+  color: #9b6c28;
+}
+
+.allowance-status-pill.status-over_budget {
+  background: rgba(217, 83, 79, 0.15);
+  color: #c9302c;
+}
+
+.allowance-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.65rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--line);
+}
+
+@media (min-width: 600px) {
+  .allowance-stats-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.allowance-stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.allowance-stat-item small {
+  font-size: 0.74rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.allowance-stat-item strong {
+  font-size: 0.95rem;
+}
+
+/* 5. Shortfall Alert Banner */
+.shortfall-alert-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  background: linear-gradient(135deg, rgba(217, 83, 79, 0.14), rgba(217, 83, 79, 0.05));
+  border: 1px solid rgba(217, 83, 79, 0.3);
+  border-left: 5px solid #d9534f;
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  margin-bottom: 1.25rem;
+  animation: bannerFadeIn 0.3s ease;
+}
+
+@keyframes bannerFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.shortfall-banner-icon {
+  color: #d9534f;
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
+.shortfall-banner-content {
+  flex: 1;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.shortfall-banner-content strong {
+  display: block;
+  font-size: 0.92rem;
+  color: #d9534f;
+  margin-bottom: 0.2rem;
+}
+
+.shortfall-banner-content p {
+  margin: 0;
+  color: var(--ink);
+}
+
+.shortfall-action-btn {
+  flex-shrink: 0;
+  align-self: center;
+}
+
+/* 6. Receivables Panel (Money Owed to You) */
+.receivables-panel {
+  border-left: 3px solid #0f665b;
+}
+
+.receivables-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.receivable-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.65rem 0.85rem;
+}
+
+.receivable-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.receivable-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.receivable-name-row strong {
+  font-size: 0.9rem;
+}
+
+.receivable-date {
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+.receivable-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-shrink: 0;
+}
+
+.receivable-amount {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.settle-btn {
+  padding: 0.25rem 0.55rem;
+  font-size: 0.78rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.settle-summary-card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.75rem 0.9rem;
+  margin-top: 0.65rem;
+  font-size: 0.88rem;
+}
+
+.settle-summary-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.25rem 0;
+}
+
+.settle-summary-row.highlight {
+  border-top: 1px dashed var(--line);
+  margin-top: 0.35rem;
+  padding-top: 0.45rem;
+  font-size: 0.95rem;
+}
+
+/* 7. Upcoming 7-Day Outflows */
+.upcoming-panel {
+  border-left: 3px solid #c39153;
+}
+
+.upcoming-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.upcoming-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.6rem 0.85rem;
+}
+
+.upcoming-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.upcoming-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.upcoming-title-row strong {
+  font-size: 0.88rem;
+}
+
+.upcoming-day-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.12rem 0.45rem;
+  border-radius: 4px;
+  background: var(--sage);
+  color: var(--ink);
+}
+
+.upcoming-day-badge.badge-urgent {
+  background: rgba(217, 83, 79, 0.15);
+  color: #d9534f;
+  font-weight: 700;
+}
+
+.upcoming-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+/* 8. Statement Cycle Spend Card */
+.cycle-spend-card {
+  background: rgba(15, 102, 91, 0.05);
+  border: 1px solid rgba(15, 102, 91, 0.18);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  margin-top: 0.85rem;
+}
+
+.cycle-spend-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cycle-label {
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.cycle-dates-text {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin-top: 0.15rem;
+}
+
+.cycle-amount-col {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.cycle-amount {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.cycle-footnote {
+  font-size: 0.74rem;
+  color: var(--muted);
+  margin: 0.5rem 0 0 0;
+  line-height: 1.35;
+}
+
+/* DARK MODE OVERRIDES FOR NEW ELEMENTS */
+:root[data-theme='dark'] .allowance-card {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+:root[data-theme='dark'] .allowance-on_track::before {
+  background: #82c9ae;
+}
+
+:root[data-theme='dark'] .allowance-status-pill.status-on_track {
+  background: rgba(130, 201, 174, 0.18);
+  color: #82c9ae;
+}
+
+:root[data-theme='dark'] .income-total-banner {
+  background: rgba(130, 201, 174, 0.08);
+  border-color: rgba(130, 201, 174, 0.2);
+}
+
+:root[data-theme='dark'] .income-total-val,
+:root[data-theme='dark'] .income-total-icon,
+:root[data-theme='dark'] .income-source-amount {
+  color: #82c9ae;
+}
+
+:root[data-theme='dark'] .math-preview-pill {
+  background: rgba(130, 201, 174, 0.12);
+  border-color: rgba(130, 201, 174, 0.25);
+  color: #82c9ae;
+}
+
+:root[data-theme='dark'] .cycle-spend-card {
+  background: rgba(130, 201, 174, 0.06);
+  border-color: rgba(130, 201, 174, 0.15);
+}

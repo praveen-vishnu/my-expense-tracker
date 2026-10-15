@@ -78,11 +78,72 @@ export function formatINR(value) {
   return `${amount < 0 ? '-' : ''}₹${formatted}`
 }
 
-export function parseAmount(raw) {
+export function evalMathExpression(raw) {
   if (raw == null) return NaN
   const cleaned = String(raw).replace(/[₹,\s]/g, '')
-  if (cleaned === '') return NaN
-  return Number(cleaned)
+  if (!cleaned) return NaN
+
+  // If it's just a number
+  if (/^-?\d+(?:\.\d+)?$/.test(cleaned)) {
+    return Number(cleaned)
+  }
+
+  // Check if it's a valid arithmetic expression: only numbers and + - * /
+  if (!/^[-+]?\d+(?:\.\d+)?(?:[+\-*/]\d+(?:\.\d+)?)+$/.test(cleaned)) {
+    return NaN
+  }
+
+  try {
+    const tokens = cleaned.match(/(\d+(?:\.\d+)?|[+\-*/])/g)
+    if (!tokens) return NaN
+
+    let initialTokens = tokens
+    if (cleaned.startsWith('-')) {
+      initialTokens = ['-' + tokens[1], ...tokens.slice(2)]
+    } else if (cleaned.startsWith('+')) {
+      initialTokens = tokens.slice(1)
+    }
+
+    // Pass 1: * and /
+    const intermediate = []
+    let i = 0
+    while (i < initialTokens.length) {
+      const tok = initialTokens[i]
+      if (tok === '*' || tok === '/') {
+        const prev = intermediate.pop()
+        const next = Number(initialTokens[i + 1])
+        if (!Number.isFinite(next) || (tok === '/' && next === 0)) return NaN
+        const res = tok === '*' ? prev * next : prev / next
+        intermediate.push(res)
+        i += 2
+      } else if (tok === '+' || tok === '-') {
+        intermediate.push(tok)
+        i++
+      } else {
+        intermediate.push(Number(tok))
+        i++
+      }
+    }
+
+    // Pass 2: + and -
+    let result = intermediate[0]
+    let j = 1
+    while (j < intermediate.length) {
+      const op = intermediate[j]
+      const next = intermediate[j + 1]
+      if (op === '+') result += next
+      else if (op === '-') result -= next
+      j += 2
+    }
+
+    return Number.isFinite(result) ? Math.round(result * 100) / 100 : NaN
+  } catch {
+    return NaN
+  }
+}
+
+export function parseAmount(raw) {
+  return evalMathExpression(raw)
 }
 
 export function createId() {

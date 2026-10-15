@@ -54,6 +54,10 @@ export default function App() {
     updateBatchExpenses,
     saveIncome,
     deleteIncome,
+    addIncomeSource,
+    updateIncomeSource,
+    deleteIncomeSource,
+    settleSplitExpense,
     saveBudget,
     saveCategoryBudget,
     copyCategoryBudgets,
@@ -73,8 +77,8 @@ export default function App() {
   const prevMonth = useMemo(() => shiftMonth(month, -1), [month])
   const previousSummary = useMemo(() => monthSummary(data, prevMonth), [data, prevMonth])
   const accountBalances = useMemo(
-    () => calculateAccountBalances(data.accounts, data.expenses, data.transfers, data.income, data.incomeAccounts),
-    [data.accounts, data.expenses, data.transfers, data.income, data.incomeAccounts]
+    () => calculateAccountBalances(data.accounts, data.expenses, data.transfers, data.income, data.incomeAccounts, data.incomeSources),
+    [data.accounts, data.expenses, data.transfers, data.income, data.incomeAccounts, data.incomeSources]
   )
   const categoryTotalsMap = useMemo(() => {
     const map = {}
@@ -269,6 +273,9 @@ export default function App() {
           <Dashboard
             summary={summary}
             accountBalances={accountBalances}
+            expenses={data.expenses}
+            recurringExpenses={data.recurringExpenses}
+            onSettleSplit={settleSplitExpense}
             onAddExpense={handleOpenAddExpense}
             onEditExpense={handleOpenEditExpense}
             onDeleteExpense={handlePromptDeleteExpense}
@@ -350,8 +357,11 @@ export default function App() {
           initialAmount={summary.income}
           accounts={data.accounts || []}
           initialAccountId={data.incomeAccounts?.[month]}
+          incomeSources={data.incomeSources || []}
+          onAddIncomeSource={addIncomeSource}
+          onDeleteIncomeSource={deleteIncomeSource}
+          onSaveFlatIncome={handleSaveIncome}
           onCancel={() => setIncomeForm(false)}
-          onSave={handleSaveIncome}
         />
       ) : null}
 
@@ -363,6 +373,7 @@ export default function App() {
           transfers={data.transfers || []}
           income={data.income}
           incomeAccounts={data.incomeAccounts || {}}
+          incomeSources={data.incomeSources || []}
           activeMonth={month}
           onOpenTransfer={(fromId, toId, amt) => {
             setTransferModal({

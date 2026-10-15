@@ -139,12 +139,59 @@ export function useTrackerData(authReady, authUser, month) {
       delete next[monthKey]
       const nextIncomeAccounts = { ...(current.incomeAccounts || {}) }
       delete nextIncomeAccounts[monthKey]
+      const nextIncomeSources = (current.incomeSources || []).filter((s) => s.monthKey !== monthKey)
       return {
         ...current,
         income: next,
         incomeAccounts: nextIncomeAccounts,
+        incomeSources: nextIncomeSources,
       }
     })
+  }, [])
+
+  const addIncomeSource = useCallback((source) => {
+    const newSource = {
+      id: createId(),
+      ...source,
+    }
+    setData((current) => ({
+      ...current,
+      incomeSources: [newSource, ...(current.incomeSources || [])],
+    }))
+  }, [])
+
+  const updateIncomeSource = useCallback((sourceId, fields) => {
+    setData((current) => ({
+      ...current,
+      incomeSources: (current.incomeSources || []).map((s) =>
+        s.id === sourceId ? { ...s, ...fields } : s
+      ),
+    }))
+  }, [])
+
+  const deleteIncomeSource = useCallback((sourceId) => {
+    setData((current) => ({
+      ...current,
+      incomeSources: (current.incomeSources || []).filter((s) => s.id !== sourceId),
+    }))
+  }, [])
+
+  const settleSplitExpense = useCallback((expenseId, settledAccountId, settledDate = new Date().toISOString().slice(0, 10)) => {
+    setData((current) => ({
+      ...current,
+      expenses: current.expenses.map((e) => {
+        if (e.id !== expenseId || !e.split) return e
+        return {
+          ...e,
+          split: {
+            ...e.split,
+            settled: true,
+            settledDate,
+            settledAccountId: settledAccountId || null,
+          },
+        }
+      }),
+    }))
   }, [])
 
   const saveBudget = useCallback((monthKey, amount) => {
@@ -265,6 +312,9 @@ export function useTrackerData(authReady, authUser, month) {
         incomeAccounts: Object.fromEntries(
           Object.entries(current.incomeAccounts || {}).filter(([_, id]) => id !== accountId)
         ),
+        incomeSources: (current.incomeSources || []).map((s) =>
+          s.accountId === accountId ? { ...s, accountId: null } : s
+        ),
       }
     })
   }, [])
@@ -317,6 +367,10 @@ export function useTrackerData(authReady, authUser, month) {
     updateBatchExpenses,
     saveIncome,
     deleteIncome,
+    addIncomeSource,
+    updateIncomeSource,
+    deleteIncomeSource,
+    settleSplitExpense,
     saveBudget,
     saveCategoryBudget,
     deleteCategoryBudget,

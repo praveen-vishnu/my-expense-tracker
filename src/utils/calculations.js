@@ -1,16 +1,30 @@
 import { daysInMonth, monthKeyFromDate, formatINR } from './formatting.js'
 
+export function effectiveExpenseAmount(expense) {
+  if (!expense) return 0
+  if (expense.split && Number.isFinite(expense.split.myShare) && expense.split.myShare >= 0) {
+    return expense.split.myShare
+  }
+  return expense.amount || 0
+}
+
 export function expensesForMonth(expenses, monthKey) {
   return expenses.filter((expense) => monthKeyFromDate(expense.date) === monthKey)
 }
 
-export function incomeForMonth(incomeByMonth, monthKey) {
-  const value = incomeByMonth[monthKey]
+export function incomeForMonth(incomeByMonth = {}, monthKey, incomeSources = []) {
+  if (Array.isArray(incomeSources) && incomeSources.length) {
+    const monthSources = incomeSources.filter((s) => s.monthKey === monthKey)
+    if (monthSources.length) {
+      return monthSources.reduce((sum, s) => sum + s.amount, 0)
+    }
+  }
+  const value = incomeByMonth?.[monthKey]
   return typeof value === 'number' && value > 0 ? value : 0
 }
 
 export function sumExpenses(expenses) {
-  return expenses.reduce((total, expense) => total + expense.amount, 0)
+  return expenses.reduce((total, expense) => total + effectiveExpenseAmount(expense), 0)
 }
 
 export function remainingBalance(income, spent) {
@@ -20,7 +34,7 @@ export function remainingBalance(income, spent) {
 export function categoryTotals(expenses) {
   const totals = new Map()
   for (const expense of expenses) {
-    totals.set(expense.category, (totals.get(expense.category) || 0) + expense.amount)
+    totals.set(expense.category, (totals.get(expense.category) || 0) + effectiveExpenseAmount(expense))
   }
   return [...totals.entries()]
     .map(([category, total]) => ({ category, total }))
@@ -69,7 +83,7 @@ export function groupExpensesByDate(expenses) {
 
 export function monthSummary(data, monthKey, now = new Date()) {
   const monthExpenses = expensesForMonth(data.expenses, monthKey)
-  const income = incomeForMonth(data.income, monthKey)
+  const income = incomeForMonth(data.income, monthKey, data.incomeSources)
   const budget = Number(data.budgets?.[monthKey]) || 0
   const spent = sumExpenses(monthExpenses)
   const count = monthExpenses.length
@@ -204,7 +218,8 @@ export function calculateAccountBalances(
   expenses = [],
   transfers = [],
   income = {},
-  incomeAccounts = {}
+  incomeAccounts = {},
+  incomeSources = []
 ) {
   const spentByAccount = new Map()
   let unassignedSpent = 0
@@ -218,12 +233,26 @@ export function calculateAccountBalances(
   }
 
   const incomeDepositedByAccount = new Map()
-  if (income && incomeAccounts) {
+  if (Array.isArray(incomeSources) && incomeSources.length) {
+    for (const s of incomeSources) {
+      if (s.accountId && Number.isFinite(s.amount) && s.amount > 0) {
+        incomeDepositedByAccount.set(s.accountId, (incomeDepositedByAccount.get(s.accountId) || 0) + s.amount)
+      }
+    }
+  } else if (income && incomeAccounts) {
     for (const [month, accId] of Object.entries(incomeAccounts)) {
       const amt = Number(income[month])
       if (accId && Number.isFinite(amt) && amt > 0) {
         incomeDepositedByAccount.set(accId, (incomeDepositedByAccount.get(accId) || 0) + amt)
       }
+    }
+  }
+
+  // Credit split paybacks that have been settled back into bank/cash account
+  for (const exp of expenses) {
+    if (exp.split?.settled && exp.split?.settledAccountId && exp.split?.owedAmount > 0) {
+      const accId = exp.split.settledAccountId
+      incomeDepositedByAccount.set(accId, (incomeDepositedByAccount.get(accId) || 0) + exp.split.owedAmount)
     }
   }
 
@@ -477,5 +506,193 @@ export function calculateFinancialHealth(currentSummary, previousSummary = null)
     spendDeltaPercent,
     categoryDrift,
     insights,
+  }
+}
+
+/**
+ * Calculates today's safe spending allowance based on remaining budget and days.
+ */
+export function getTodaySpendingAllowance(summary, expenses = [], now = new Date()) {
+  const monthKey = summary?.monthKey || ''
+  const budget = summary?.budget || 0
+  const income = summary?.income || 0
+  const totalDays = daysInMonth(monthKey || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
+  const todayDay = now.getDate()
+  const todayISOStr = `${monthKey}-${String(todayDay).padStart(2, '0')}`
+
+  const todayExpenses = expenses.filter((e) => e.date === todayISOStr)
+  const todaySpent = sumExpenses(todayExpenses)
+
+  const remainingDays = Math.max(totalDays - todayDay + 1, 1)
+  const monthSpent = summary?.spent || 0
+  const spentBeforeToday = Math.max(monthSpent - todaySpent, 0)
+
+  let baseTarget = budget > 0 ? budget : income
+  let poolRemaining = Math.max(baseTarget - spentBeforeToday, 0)
+  let todayAllowance = Math.round(poolRemaining / remainingDays)
+  let remainingToday = todayAllowance - todaySpent
+
+  let status = 'on-track'
+  if (baseTarget > 0) {
+    if (todaySpent > todayAllowance) {
+      status = 'exceeded'
+    } else if (todayAllowance > 0 && (todaySpent / todayAllowance) >= 0.8) {
+      status = 'warning'
+    }
+  }
+
+  return {
+    todayISO: todayISOStr,
+    todaySpent,
+    todayAllowance,
+    remainingToday,
+    remainingDays,
+    status,
+  }
+}
+
+/**
+ * Forecasts cash outflow for the upcoming window of days (recurring EMIs and credit card bills)
+ * and flags low-balance shortfall warnings.
+ */
+export function getUpcomingOutflows(recurringExpenses = [], accounts = [], now = new Date(), windowDays = 7) {
+  const currentDay = now.getDate()
+  const currentMonth = now.getMonth() + 1
+  const currentYear = now.getFullYear()
+  const daysInCurrentMonth = new Date(currentYear, currentMonth, 0).getDate()
+
+  const items = []
+  const outflowByAccount = new Map()
+
+  for (const schedule of recurringExpenses) {
+    let diff = schedule.day - currentDay
+    if (diff < 0) {
+      diff += daysInCurrentMonth
+    }
+    if (diff >= 0 && diff < windowDays) {
+      const targetAcc = accounts.find((a) => a.id === schedule.accountId)
+      items.push({
+        id: `rec_${schedule.id}`,
+        name: schedule.name,
+        amount: schedule.amount,
+        day: schedule.day,
+        daysAway: diff,
+        type: schedule.kind === 'emi' ? 'EMI' : 'Recurring Bill',
+        accountId: schedule.accountId,
+        accountName: targetAcc?.name || 'Unassigned Account',
+      })
+      if (schedule.accountId) {
+        outflowByAccount.set(schedule.accountId, (outflowByAccount.get(schedule.accountId) || 0) + schedule.amount)
+      }
+    }
+  }
+
+  for (const acc of accounts) {
+    if (acc.type === 'credit_card' && acc.dueDay && acc.outstanding > 0) {
+      let diff = acc.dueDay - currentDay
+      if (diff < 0) {
+        diff += daysInCurrentMonth
+      }
+      if (diff >= 0 && diff < windowDays) {
+        items.push({
+          id: `cc_due_${acc.id}`,
+          name: `${acc.name} Bill`,
+          amount: acc.outstanding,
+          day: acc.dueDay,
+          daysAway: diff,
+          type: 'Credit Card Bill',
+          accountId: acc.id,
+          accountName: acc.name,
+        })
+      }
+    }
+  }
+
+  items.sort((a, b) => a.daysAway - b.daysAway)
+  const totalOutflow = items.reduce((sum, item) => sum + item.amount, 0)
+
+  const shortfallAlerts = []
+  for (const [accId, needed] of outflowByAccount.entries()) {
+    const acc = accounts.find((a) => a.id === accId)
+    if (acc && acc.type !== 'credit_card' && acc.currentBalance < needed) {
+      shortfallAlerts.push({
+        accountId: acc.id,
+        accountName: acc.name,
+        currentBalance: acc.currentBalance,
+        upcomingOutflow: needed,
+        shortfall: needed - acc.currentBalance,
+      })
+    }
+  }
+
+  return {
+    windowDays,
+    items,
+    totalOutflow,
+    shortfallAlerts,
+  }
+}
+
+/**
+ * Calculates spending in a Credit Card's active billing cycle rather than calendar month.
+ */
+export function getCreditCardCycleSpend(card, expenses = [], now = new Date()) {
+  if (!card || card.type !== 'credit_card' || !card.billingDay) {
+    return null
+  }
+  const billingDay = card.billingDay
+  const currentDay = now.getDate()
+  const year = now.getFullYear()
+  const month = now.getMonth()
+
+  let cycleStartDate, cycleEndDate
+  if (currentDay >= billingDay) {
+    cycleStartDate = new Date(year, month, billingDay + 1)
+    cycleEndDate = new Date(year, month + 1, billingDay)
+  } else {
+    cycleStartDate = new Date(year, month - 1, billingDay + 1)
+    cycleEndDate = new Date(year, month, billingDay)
+  }
+
+  const startISO = `${cycleStartDate.getFullYear()}-${String(cycleStartDate.getMonth() + 1).padStart(2, '0')}-${String(cycleStartDate.getDate()).padStart(2, '0')}`
+  const endISO = `${cycleEndDate.getFullYear()}-${String(cycleEndDate.getMonth() + 1).padStart(2, '0')}-${String(cycleEndDate.getDate()).padStart(2, '0')}`
+
+  const cycleExpenses = expenses.filter((e) => e.accountId === card.id && e.date >= startISO && e.date <= endISO)
+  const cycleSpend = sumExpenses(cycleExpenses)
+
+  return {
+    cycleStart: startISO,
+    cycleEnd: endISO,
+    cycleSpend,
+    expenseCount: cycleExpenses.length,
+    billingDay,
+    dueDay: card.dueDay,
+  }
+}
+
+/**
+ * Collects pending split receivables (money owed by friends).
+ */
+export function getPendingSplitReceivables(expenses = []) {
+  const pending = []
+  for (const exp of expenses) {
+    if (exp.split && !exp.split.settled && exp.split.owedAmount > 0) {
+      pending.push({
+        expenseId: exp.id,
+        date: exp.date,
+        category: exp.category,
+        note: exp.note,
+        totalAmount: exp.amount,
+        myShare: exp.split.myShare,
+        owedAmount: exp.split.owedAmount,
+        owedBy: exp.split.owedBy || 'Friend',
+      })
+    }
+  }
+  pending.sort((a, b) => b.date.localeCompare(a.date))
+  const totalOwed = pending.reduce((sum, item) => sum + item.owedAmount, 0)
+  return {
+    items: pending,
+    totalOwed,
   }
 }

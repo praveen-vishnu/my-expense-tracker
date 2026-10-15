@@ -1,6 +1,17 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { categoryTotals, monthSummary, calculateAccountBalances, calculateFinancialHealth } from './calculations.js'
+import {
+  categoryTotals,
+  monthSummary,
+  calculateAccountBalances,
+  calculateFinancialHealth,
+  sumExpenses,
+  getTodaySpendingAllowance,
+  getUpcomingOutflows,
+  getCreditCardCycleSpend,
+  getPendingSplitReceivables,
+} from './calculations.js'
+import { evalMathExpression } from './formatting.js'
 
 test('categoryTotals keeps top spending categories sorted by amount', () => {
   const totals = categoryTotals([
@@ -233,5 +244,113 @@ test('calculateAccountBalances incorporates income tagging, transfers, CC bill s
   // Total credit outstanding & net worth: 76,500 - 15,000 = 61,500
   assert.equal(result.totalCreditOutstanding, 15000)
   assert.equal(result.netWorth, 61500)
+})
+
+test('evalMathExpression safely parses in-line arithmetic expressions', () => {
+  assert.equal(evalMathExpression('250 + 80'), 330)
+  assert.equal(evalMathExpression('1200 * 2'), 2400)
+  assert.equal(evalMathExpression('500 - 60 / 2'), 470)
+  assert.equal(evalMathExpression('₹ 1,500 + 500'), 2000)
+  assert.equal(evalMathExpression('85000'), 85000)
+  assert.ok(Number.isNaN(evalMathExpression('500 / 0')))
+  assert.ok(Number.isNaN(evalMathExpression('abc')))
+})
+
+test('split expenses only count user share in budgets and track pending receivables', () => {
+  const expenses = [
+    {
+      id: 'e1',
+      date: '2026-10-10',
+      category: 'Food',
+      amount: 3000,
+      split: {
+        myShare: 1000,
+        owedAmount: 2000,
+        owedBy: 'Rahul & Sneha',
+        settled: false,
+      },
+    },
+    {
+      id: 'e2',
+      date: '2026-10-12',
+      category: 'Food',
+      amount: 500,
+    },
+  ]
+
+  // sumExpenses should only be 1000 + 500 = 1500, NOT 3500!
+  assert.equal(sumExpenses(expenses), 1500)
+
+  // categoryTotals should reflect only user's share (1500)
+  const totals = categoryTotals(expenses)
+  assert.equal(totals[0].total, 1500)
+
+  // Receivables tracker
+  const receivables = getPendingSplitReceivables(expenses)
+  assert.equal(receivables.items.length, 1)
+  assert.equal(receivables.totalOwed, 2000)
+  assert.equal(receivables.items[0].owedBy, 'Rahul & Sneha')
+})
+
+test('getTodaySpendingAllowance calculates daily pocket allowance correctly', () => {
+  const summary = {
+    monthKey: '2026-10',
+    budget: 31000,
+    spent: 10000,
+  }
+  const expenses = [
+    { date: '2026-10-15', amount: 500 }, // spent today
+  ]
+  const mockNow = new Date('2026-10-15T10:00:00Z') // Day 15 of 31 -> 17 days left (15 to 31)
+
+  const allowance = getTodaySpendingAllowance(summary, expenses, mockNow)
+  // Spent before today: 10000 - 500 = 9500
+  // Pool remaining: 31000 - 9500 = 21500
+  // 17 days remaining -> 21500 / 17 ~ 1265/day
+  assert.equal(allowance.todaySpent, 500)
+  assert.equal(allowance.todayAllowance, 1265)
+  assert.equal(allowance.remainingToday, 765) // 1265 - 500
+  assert.equal(allowance.status, 'on-track')
+})
+
+test('getUpcomingOutflows forecasts upcoming commitments and flags bank balance shortfall', () => {
+  const accounts = [
+    { id: 'acc_bank', name: 'Primary Bank', type: 'bank', currentBalance: 15000 },
+    { id: 'acc_cc', name: 'Card', type: 'credit_card', outstanding: 12000, dueDay: 18 },
+  ]
+  const recurring = [
+    { id: 'r1', name: 'Home Loan EMI', amount: 20000, day: 19, kind: 'emi', accountId: 'acc_bank' },
+  ]
+  const mockNow = new Date('2026-10-15T10:00:00Z') // Oct 15
+
+  const forecast = getUpcomingOutflows(recurring, accounts, mockNow, 7)
+  // Both EMI on 19th (4 days away) and Card due on 18th (3 days away) fall within 7 days
+  assert.equal(forecast.items.length, 2)
+  assert.equal(forecast.totalOutflow, 32000)
+
+  // Primary Bank has 15,000 balance but EMI needs 20,000 -> shortfall of 5,000!
+  assert.equal(forecast.shortfallAlerts.length, 1)
+  assert.equal(forecast.shortfallAlerts[0].shortfall, 5000)
+  assert.equal(forecast.shortfallAlerts[0].accountName, 'Primary Bank')
+})
+
+test('getCreditCardCycleSpend computes spending within active statement cycle', () => {
+  const card = {
+    id: 'acc_cc',
+    name: 'Infinia',
+    type: 'credit_card',
+    billingDay: 15,
+    dueDay: 5,
+  }
+  const expenses = [
+    { date: '2026-09-20', amount: 8000, accountId: 'acc_cc' }, // Inside cycle (Sept 16 to Oct 15)
+    { date: '2026-10-02', amount: 5000, accountId: 'acc_cc' }, // Inside cycle (Sept 16 to Oct 15)
+    { date: '2026-10-18', amount: 3000, accountId: 'acc_cc' }, // Outside cycle (after Oct 15)
+  ]
+  const mockNow = new Date('2026-10-10T10:00:00Z') // Oct 10 (before billing day of Oct 15)
+
+  const cycle = getCreditCardCycleSpend(card, expenses, mockNow)
+  assert.equal(cycle.cycleSpend, 13000) // 8000 + 5000
+  assert.equal(cycle.expenseCount, 2)
 })
 

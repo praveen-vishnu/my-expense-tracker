@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react'
 import { formatINR, formatMonthLabel, relativeDateLabel } from '../utils/formatting.js'
+import { getCreditCardCycleSpend } from '../utils/calculations.js'
 import ModalSheet from './ModalSheet.jsx'
-import { IconCreditCard, IconBuildingBank, IconCash, IconDeviceMobile, IconArrowsLeftRight } from '@tabler/icons-react'
+import { IconCreditCard, IconBuildingBank, IconCash, IconDeviceMobile, IconArrowsLeftRight, IconReceipt } from '@tabler/icons-react'
 
 export default function AccountDetailModal({
   account,
@@ -10,11 +11,18 @@ export default function AccountDetailModal({
   transfers = [],
   income = {},
   incomeAccounts = {},
+  incomeSources = [],
   activeMonth,
   onOpenTransfer,
   onClose,
 }) {
-  const [filterMode, setFilterMode] = useState('month') // 'month' | 'all'
+  const isCreditCard = account?.type === 'credit_card'
+  const [filterMode, setFilterMode] = useState(isCreditCard && account?.billingDay ? 'cycle' : 'month')
+
+  const cycleData = useMemo(() => {
+    if (!isCreditCard || !account?.billingDay) return null
+    return getCreditCardCycleSpend(account, expenses)
+  }, [isCreditCard, account, expenses])
 
   // Build ledger of all movements for this account
   const ledgerItems = useMemo(() => {
@@ -37,21 +45,52 @@ export default function AccountDetailModal({
     }
 
     // 2. Income deposits credited to this account
-    for (const [monthKey, accId] of Object.entries(incomeAccounts)) {
-      if (accId === account.id && income[monthKey]) {
+    if ((incomeSources || []).length > 0) {
+      for (const src of incomeSources) {
+        if (src.accountId === account.id) {
+          items.push({
+            id: `source_${src.id}`,
+            type: 'income',
+            date: src.date,
+            monthKey: src.monthKey,
+            title: src.name || 'Income Stream',
+            note: 'Multi-source deposit',
+            amount: src.amount,
+          })
+        }
+      }
+    } else {
+      for (const [monthKey, accId] of Object.entries(incomeAccounts)) {
+        if (accId === account.id && income[monthKey]) {
+          items.push({
+            id: `inc_${monthKey}`,
+            type: 'income',
+            date: `${monthKey}-01`,
+            monthKey,
+            title: 'Monthly Income',
+            note: `Credited for ${formatMonthLabel(monthKey)}`,
+            amount: income[monthKey],
+          })
+        }
+      }
+    }
+
+    // 3. Settled split reimbursements credited to this account
+    for (const exp of expenses) {
+      if (exp.split?.settled && exp.split.settledAccountId === account.id && exp.split.owedAmount > 0) {
         items.push({
-          id: `inc_${monthKey}`,
-          type: 'income',
-          date: `${monthKey}-01`,
-          monthKey,
-          title: 'Monthly Income',
-          note: `Credited for ${formatMonthLabel(monthKey)}`,
-          amount: income[monthKey],
+          id: `split_settled_${exp.id}`,
+          type: 'reimbursement',
+          date: exp.split.settledDate || exp.date,
+          monthKey: (exp.split.settledDate || exp.date).slice(0, 7),
+          title: `Split Settled (${exp.split.owedBy || 'Friend'})`,
+          note: `Reimbursement for ${exp.category}`,
+          amount: exp.split.owedAmount,
         })
       }
     }
 
-    // 3. Transfers out
+    // 4. Transfers out
     for (const tr of transfers) {
       if (tr.fromAccountId === account.id) {
         const destAcc = allAccounts.find((a) => a.id === tr.toAccountId)
@@ -67,10 +106,10 @@ export default function AccountDetailModal({
       }
     }
 
-    // 4. Transfers in (or CC bill payments received)
+    // 5. Transfers in (or CC bill payments received)
     for (const tr of transfers) {
       if (tr.toAccountId === account.id) {
-        const srcAcc = allAccounts.find((a) => a.id === tr.fromAccountId)
+        const srcAcc = allAccounts.find((a) => a.fromAccountId)
         items.push({
           id: `tr_in_${tr.id}`,
           type: 'transfer_in',
@@ -86,18 +125,19 @@ export default function AccountDetailModal({
     // Sort newest date first
     items.sort((a, b) => b.date.localeCompare(a.date))
     return items
-  }, [account, expenses, transfers, income, incomeAccounts, allAccounts])
+  }, [account, expenses, transfers, income, incomeAccounts, incomeSources, allAccounts])
 
   const filteredItems = useMemo(() => {
+    if (filterMode === 'cycle' && cycleData) {
+      return ledgerItems.filter((i) => i.date >= cycleData.cycleStart && i.date <= cycleData.cycleEnd)
+    }
     if (filterMode === 'month') {
       return ledgerItems.filter((i) => i.monthKey === activeMonth)
     }
     return ledgerItems
-  }, [ledgerItems, filterMode, activeMonth])
+  }, [ledgerItems, filterMode, activeMonth, cycleData])
 
   if (!account) return null
-
-  const isCreditCard = account.type === 'credit_card'
 
   return (
     <ModalSheet
@@ -212,6 +252,27 @@ export default function AccountDetailModal({
             </div>
           ) : null}
 
+          {/* STATEMENT CYCLE SPEND BREAKDOWN */}
+          {isCreditCard && account.billingDay && cycleData ? (
+            <div className="cycle-spend-card">
+              <div className="cycle-spend-row">
+                <div>
+                  <span className="cycle-label">Active Statement Cycle</span>
+                  <div className="cycle-dates-text">
+                    {cycleData.cycleStart} → {cycleData.cycleEnd}
+                  </div>
+                </div>
+                <div className="cycle-amount-col">
+                  <span className="cycle-amount money spent">{formatINR(cycleData.cycleSpend)}</span>
+                  <small className="muted">{cycleData.cycleExpenses.length} transaction{cycleData.cycleExpenses.length === 1 ? '' : 's'}</small>
+                </div>
+              </div>
+              <p className="cycle-footnote">
+                Transactions charged between statement dates ({account.billingDay}th to {account.billingDay}th).
+              </p>
+            </div>
+          ) : null}
+
           {/* ACTION BUTTONS */}
           <div className="acc-actions-row">
             {isCreditCard ? (
@@ -247,6 +308,15 @@ export default function AccountDetailModal({
           <div className="ledger-head">
             <h3>Account Activity</h3>
             <div className="ledger-filter-pills" role="tablist">
+              {isCreditCard && account.billingDay ? (
+                <button
+                  type="button"
+                  className={`filter-pill ${filterMode === 'cycle' ? 'active' : ''}`}
+                  onClick={() => setFilterMode('cycle')}
+                >
+                  Statement Cycle
+                </button>
+              ) : null}
               <button
                 type="button"
                 className={`filter-pill ${filterMode === 'month' ? 'active' : ''}`}

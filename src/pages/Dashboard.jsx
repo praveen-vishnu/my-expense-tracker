@@ -1,11 +1,29 @@
-import { formatINR, formatMonthLabel } from '../utils/formatting.js'
-import { groupExpensesByDate } from '../utils/calculations.js'
+import { useState, useMemo } from 'react'
+import { formatINR, formatMonthLabel, relativeDateLabel } from '../utils/formatting.js'
+import {
+  groupExpensesByDate,
+  getTodaySpendingAllowance,
+  getUpcomingOutflows,
+  getPendingSplitReceivables,
+} from '../utils/calculations.js'
 import ExpenseList from '../components/ExpenseList.jsx'
-import { IconAlertTriangle, IconTarget, IconCamera } from '@tabler/icons-react'
+import ModalSheet from '../components/ModalSheet.jsx'
+import {
+  IconAlertTriangle,
+  IconCoins,
+  IconReceipt,
+  IconClock,
+  IconBuildingBank,
+  IconCheck,
+  IconArrowsLeftRight,
+} from '@tabler/icons-react'
 
 export default function Dashboard({
   summary,
   accountBalances,
+  expenses = [],
+  recurringExpenses = [],
+  onSettleSplit,
   onAddExpense,
   onEditExpense,
   onDeleteExpense,
@@ -13,10 +31,15 @@ export default function Dashboard({
   onEditIncome,
   onDeleteIncome,
   onOpenCategoryBudgets,
-  onScanReceipt,
   onOpenAccountDetail,
   onOpenTransfer,
 }) {
+  const [settleTarget, setSettleTarget] = useState(null)
+  const defaultAcc = accountBalances?.accounts?.find((a) => a.isDefault && a.type !== 'credit_card') ||
+    accountBalances?.accounts?.find((a) => a.type !== 'credit_card') ||
+    accountBalances?.accounts?.[0]
+  const [settleAccountId, setSettleAccountId] = useState(defaultAcc?.id || '')
+
   const maxCategory = summary.categories[0]?.total || 0
   const recent = groupExpensesByDate(summary.expenses).slice(0, 5)
   const recentItems = recent.map((group) => ({
@@ -24,12 +47,60 @@ export default function Dashboard({
     items: group.items.slice(0, 5),
   }))
 
+  // Real-world calculations
+  const todayAllowance = useMemo(() => {
+    return getTodaySpendingAllowance(summary, expenses)
+  }, [summary, expenses])
+
+  const upcomingOutflows = useMemo(() => {
+    return getUpcomingOutflows(recurringExpenses, accountBalances?.accounts || [])
+  }, [recurringExpenses, accountBalances?.accounts])
+
+  const splitReceivables = useMemo(() => {
+    return getPendingSplitReceivables(expenses)
+  }, [expenses])
+
+  function handleConfirmSettle() {
+    if (!settleTarget || !onSettleSplit) return
+    onSettleSplit(settleTarget.id, settleAccountId || null)
+    setSettleTarget(null)
+  }
+
   return (
     <div className="page dashboard-page">
       <header className="page-intro">
         <h1>{formatMonthLabel(summary.monthKey)}</h1>
         <p>A snapshot of what came in, what went out, and where it went.</p>
       </header>
+
+      {/* SHORTFALL ALERT BANNER */}
+      {upcomingOutflows.shortfalls.length > 0 ? (
+        <div className="shortfall-alert-banner" role="alert">
+          <div className="shortfall-banner-icon">
+            <IconAlertTriangle size={24} />
+          </div>
+          <div className="shortfall-banner-content">
+            <strong>Upcoming Balance Shortfall Warning</strong>
+            {upcomingOutflows.shortfalls.map((sf) => (
+              <p key={sf.account.id}>
+                {sf.account.name} has only <strong>{formatINR(sf.account.currentBalance)}</strong>, which is insufficient for upcoming scheduled commitments totaling <strong>{formatINR(sf.totalDue)}</strong> due in the next 7 days.
+              </p>
+            ))}
+          </div>
+          {onOpenTransfer ? (
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm shortfall-action-btn"
+              onClick={() => {
+                const first = upcomingOutflows.shortfalls[0]
+                onOpenTransfer(null, first.account.id, first.shortfall)
+              }}
+            >
+              Transfer Funds
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       <section className="summary-grid" aria-label="Month totals">
         <article className="stat">
@@ -67,6 +138,55 @@ export default function Dashboard({
           </strong>
         </article>
       </section>
+
+      {/* TODAY'S POCKET ALLOWANCE WIDGET */}
+      {summary.budget > 0 || summary.income > 0 ? (
+        <section className={`allowance-card allowance-${todayAllowance.status}`} aria-label="Today's pocket allowance">
+          <div className="allowance-main">
+            <div className="allowance-label-group">
+              <span className="allowance-tag">
+                <IconCoins size={16} />
+                <span>Today's Pocket Allowance</span>
+              </span>
+              <p className="allowance-sub">
+                {todayAllowance.status === 'over_budget'
+                  ? 'Daily safe pace exceeded. Spending further today will increase your month-end overrun.'
+                  : todayAllowance.status === 'caution'
+                    ? 'Tight daily margin. Spend cautiously to preserve your month-end buffer.'
+                    : 'Discretionary spend you can comfortably afford today without risking monthly goals.'}
+              </p>
+            </div>
+            <div className="allowance-hero">
+              <span className={`allowance-val ${todayAllowance.isPositive ? 'positive' : 'negative'}`}>
+                {formatINR(todayAllowance.todayAllowance)}
+              </span>
+              <span className={`allowance-status-pill status-${todayAllowance.status}`}>
+                {todayAllowance.status === 'on_track' ? '✓ Safe to spend' : todayAllowance.status === 'caution' ? '▲ Tight buffer' : '● Exceeded'}
+              </span>
+            </div>
+          </div>
+          <div className="allowance-stats-grid">
+            <div className="allowance-stat-item">
+              <small>Spent Today</small>
+              <strong>{formatINR(todayAllowance.spentToday)}</strong>
+            </div>
+            <div className="allowance-stat-item">
+              <small>Safe Daily Pace</small>
+              <strong>{formatINR(todayAllowance.safeDaily)}/day</strong>
+            </div>
+            <div className="allowance-stat-item">
+              <small>Remaining Today</small>
+              <strong className={todayAllowance.remainingToday < 0 ? 'money spent' : ''}>
+                {formatINR(todayAllowance.remainingToday)}
+              </strong>
+            </div>
+            <div className="allowance-stat-item">
+              <small>Days Remaining</small>
+              <strong>{todayAllowance.remainingDays} days</strong>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <div className="dashboard-columns">
         <div className="dashboard-main-col">
@@ -324,6 +444,91 @@ export default function Dashboard({
             </section>
           ) : null}
 
+          {/* MONEY OWED TO YOU (SPLIT RECEIVABLES) WIDGET */}
+          {splitReceivables.count > 0 ? (
+            <section className="panel receivables-panel">
+              <div className="panel-head">
+                <div>
+                  <h2>Money Owed to You</h2>
+                  <p className="muted">{splitReceivables.count} pending reimbursement{splitReceivables.count === 1 ? '' : 's'}</p>
+                </div>
+                <span className="receivables-total money positive">
+                  +{formatINR(splitReceivables.totalOwed)}
+                </span>
+              </div>
+              <div className="receivables-list">
+                {splitReceivables.receivables.map((item) => (
+                  <div key={item.id} className="receivable-item">
+                    <div className="receivable-info">
+                      <div className="receivable-name-row">
+                        <strong>{item.split.owedBy || 'Friend'}</strong>
+                        <span className="receivable-date">{relativeDateLabel(item.date)}</span>
+                      </div>
+                      <small className="muted">
+                        For {item.category}{item.note ? ` (${item.note})` : ''} · Total {formatINR(item.amount)}
+                      </small>
+                    </div>
+                    <div className="receivable-actions">
+                      <span className="receivable-amount positive">+{formatINR(item.split.owedAmount)}</span>
+                      {onSettleSplit ? (
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm settle-btn"
+                          onClick={() => setSettleTarget(item)}
+                          title="Mark as paid back and deposit to bank"
+                        >
+                          <IconCheck size={14} /> Settle
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {/* UPCOMING 7-DAY OUTFLOWS WIDGET */}
+          {upcomingOutflows.upcoming.length > 0 ? (
+            <section className="panel upcoming-panel">
+              <div className="panel-head">
+                <div>
+                  <h2>Upcoming Payments (7 Days)</h2>
+                  <p className="muted">Scheduled EMIs and bills</p>
+                </div>
+                <span className="upcoming-total money spent">
+                  {formatINR(upcomingOutflows.totalUpcoming)}
+                </span>
+              </div>
+              <div className="upcoming-list">
+                {upcomingOutflows.upcoming.map((item) => (
+                  <div key={item.id} className="upcoming-item">
+                    <div className="upcoming-info">
+                      <div className="upcoming-title-row">
+                        <strong>{item.name}</strong>
+                        <span className={`upcoming-day-badge ${item.isDueSoon ? 'badge-urgent' : ''}`}>
+                          {item.daysRemaining === 0 ? 'Today' : item.daysRemaining === 1 ? 'Tomorrow' : `in ${item.daysRemaining} days`}
+                        </span>
+                      </div>
+                      <div className="upcoming-meta">
+                        <IconClock size={12} />
+                        <span>Due {item.dueDate}</span>
+                        {item.account ? (
+                          <>
+                            <span>·</span>
+                            <span>{item.account.name}</span>
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
+                    <strong className="money spent">
+                      {formatINR(item.amount)}
+                    </strong>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
           {summary.expenses.length > 0 ? (
             <section className="panel recent-panel">
               <div className="panel-head">
@@ -343,6 +548,70 @@ export default function Dashboard({
           ) : null}
         </div>
       </div>
+
+      {/* SETTLE SPLIT RECEIVABLE MODAL */}
+      {settleTarget ? (
+        <ModalSheet
+          titleId="settle-split-title"
+          descriptionId="settle-split-desc"
+          onDismiss={() => setSettleTarget(null)}
+        >
+          <div className="sheet-form">
+            <div className="sheet-head">
+              <h2 id="settle-split-title">Settle Split Expense</h2>
+              <button type="button" className="text-btn" onClick={() => setSettleTarget(null)}>
+                Cancel
+              </button>
+            </div>
+            <p id="settle-split-desc" className="muted">
+              Record receipt of <strong>+{formatINR(settleTarget.split.owedAmount)}</strong> from <strong>{settleTarget.split.owedBy || 'Friend'}</strong>.
+            </p>
+
+            <div className="settle-summary-card">
+              <div className="settle-summary-row">
+                <span>Original Expense:</span>
+                <strong>{settleTarget.category} ({formatINR(settleTarget.amount)})</strong>
+              </div>
+              <div className="settle-summary-row">
+                <span>Your Share:</span>
+                <span>{formatINR(settleTarget.split.myShare)}</span>
+              </div>
+              <div className="settle-summary-row highlight">
+                <span>Reimbursement Amount:</span>
+                <strong className="positive">+{formatINR(settleTarget.split.owedAmount)}</strong>
+              </div>
+            </div>
+
+            {accountBalances?.accounts?.length ? (
+              <label className="field mt-md">
+                <span>Deposit reimbursement into</span>
+                <select
+                  value={settleAccountId}
+                  onChange={(e) => setSettleAccountId(e.target.value)}
+                >
+                  <option value="">None / Cash</option>
+                  {accountBalances.accounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.name} ({acc.type === 'credit_card' ? 'Credit Card' : acc.type === 'bank' ? 'Bank' : acc.type === 'wallet' ? 'Wallet' : 'Cash'})
+                    </option>
+                  ))}
+                </select>
+                <small className="field-hint">
+                  Your designated account balance will be credited without inflating your monthly income.
+                </small>
+              </label>
+            ) : null}
+
+            <button
+              type="button"
+              className="btn btn-primary btn-block mt-md"
+              onClick={handleConfirmSettle}
+            >
+              <IconCheck size={18} /> Mark as Settled & Credit Account
+            </button>
+          </div>
+        </ModalSheet>
+      ) : null}
     </div>
   )
 }
