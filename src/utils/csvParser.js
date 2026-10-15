@@ -8,20 +8,31 @@ import { createId, isValidDate, pad2 } from './formatting.js'
 // Keyword-to-category mapping for smart auto-categorization
 const CATEGORY_RULES = [
   {
+    category: 'Rent',
+    keywords: ['rent', 'owner', 'maintenance', 'chelladurai', 'house rent']
+  },
+  {
+    category: 'EMI',
+    keywords: [
+      'emi', 'loan', 'bajaj', 'tatacapital', 'tata capital', 'incred', 'eduvanz',
+      'chola', 'muthoot', 'home loan', 'car loan', 'personal loan', 'clearing corp', 'pln024901'
+    ]
+  },
+  {
     category: 'Food',
     keywords: [
       'swiggy', 'zomato', 'blinkit', 'zepto', 'instamart', 'bigbasket', 'grofers',
       'mcdonald', 'kfc', 'starbucks', 'domino', 'pizza', 'subway', 'burger',
       'restaurant', 'cafe', 'baker', 'sweet', 'chai', 'tea', 'dhaba', 'barbeque',
-      'haldiram', 'eatfit', 'faasos', 'behrouz'
+      'haldiram', 'eatfit', 'faasos', 'behrouz', 'compass'
     ]
   },
   {
     category: 'Transport',
     keywords: [
-      'uber', 'ola', 'rapido', 'irctc', 'railway', 'metro', 'makemytrip',
+      'uber', 'ola', 'rapido', 'redbus', 'irctc', 'railway', 'metro', 'makemytrip',
       'indigo', 'air india', 'spicejet', 'vistara', 'fastag', 'toll',
-      'petrol', 'fuel', 'hpcl', 'bpcl', 'iocl', 'shell', 'cng', 'auto'
+      'petrol', 'fuel', 'hpcl', 'bpcl', 'iocl', 'shell', 'cng', 'auto rickshaw', 'fuels'
     ]
   },
   {
@@ -29,7 +40,16 @@ const CATEGORY_RULES = [
     keywords: [
       'electricity', 'bescom', 'tata power', 'cesc', 'bses', 'airtel', 'jio',
       'vodafone', 'vi', 'act fibernet', 'hathway', 'tatasky', 'dth',
-      'gas', 'igl', 'mahanagar', 'water', 'broadband', 'utility', 'maintenance'
+      'gas', 'igl', 'mahanagar', 'water', 'broadband', 'utility', 'billpay',
+      'credit card payment', 'cc payment'
+    ]
+  },
+  {
+    category: 'Entertainment',
+    keywords: [
+      'netflix', 'spotify', 'prime video', 'hotstar', 'disney', 'youtube',
+      'bookmyshow', 'pvr', 'inox', 'cinepolis', 'gaming', 'steam', 'playstation',
+      'playstore', 'google play'
     ]
   },
   {
@@ -41,52 +61,52 @@ const CATEGORY_RULES = [
     ]
   },
   {
-    category: 'Entertainment',
-    keywords: [
-      'netflix', 'spotify', 'prime video', 'hotstar', 'disney', 'youtube',
-      'bookmyshow', 'pvr', 'inox', 'cinepolis', 'gaming', 'steam', 'playstation'
-    ]
-  },
-  {
     category: 'Health',
     keywords: [
       'apollo', 'pharmacy', 'medplus', 'netmeds', '1mg', 'practo', 'hospital',
       'clinic', 'diagnostic', 'dr ', 'lab', 'dental', 'opticals', 'pharma'
     ]
-  },
-  {
-    category: 'EMI',
-    keywords: [
-      'emi', 'loan', 'bajaj finance', 'hdb financial', 'chola', 'muthoot',
-      'home loan', 'car loan', 'personal loan'
-    ]
   }
 ]
 
 /**
- * Clean messy bank transaction narrations (e.g., UPI/428192837/SWIGGY/BANGALORE/PYMNT).
+ * Clean messy bank transaction narrations (e.g., UPI/428192837/SWIGGY/BANGALORE/PYMNT or UPI-NAME-VPA-BANK-REF-REMARK).
  */
 export function cleanNarration(raw) {
   if (!raw) return 'Expense'
   let text = String(raw).trim()
 
-  // Remove common banking prefixes
-  text = text.replace(/^(UPI\/[A-Z0-9_-]+\/|POS\s+[0-9]+\s+|NEFT\/[A-Z0-9_-]+\/|IMPS\/[A-Z0-9_-]+\/|ACH\s+D-\s*)/i, '')
+  // 1. Remove common banking prefixes
+  text = text.replace(/^(UPI\/[A-Z0-9_-]+\/|POS\s+[0-9]+\s+|NEFT\/[A-Z0-9_-]+\/|IMPS\/[A-Z0-9_-]+\/|ACH\s+D-\s*|IB\s+BILLPAY\s+DR-\s*)/i, '')
   
-  // Extract primary merchant tag if slash-separated
-  const parts = text.split('/')
-  if (parts.length > 1) {
-    const candidate = parts.find((p) => p.trim().length > 2 && !/^\d+$/.test(p.trim()))
+  // 2. Handle slash-separated narrations
+  const slashParts = text.split('/')
+  if (slashParts.length > 1) {
+    const candidate = slashParts.find((p) => p.trim().length > 2 && !/^\d+$/.test(p.trim()))
     if (candidate) text = candidate.trim()
   }
 
-  // Remove trailing bank payment suffixes
+  // 3. Handle Indian Bank UPI Dash format: UPI-MERCHANT_NAME-VPA@BANK-BANKIFSC-RRN-REMARK
+  if (/^UPI-/i.test(text)) {
+    const dashParts = text.split('-')
+    // Index 1 is usually the merchant / payee name
+    if (dashParts.length >= 2 && dashParts[1].trim().length > 1) {
+      let candidate = dashParts[1].trim()
+      // If it contains an autotag like AUTOPAY-NETFLIX
+      if (candidate.toLowerCase() === 'autopay' && dashParts[2]) {
+        candidate = dashParts[2].trim()
+      }
+      text = candidate
+    }
+  }
+
+  // 4. Remove trailing bank payment suffixes and cities
   text = text.replace(/(\/PYMNT|\/UPI|\/CR|\/DR|\/PAYMENT|\s+IN|\s+BANGALORE|\s+MUMBAI|\s+DELHI|\s+GURGAON|\s+HYDERABAD).*$/i, '')
   
-  // Clean up punctuation and excess spaces
+  // 5. Clean up punctuation and excess spaces
   text = text.replace(/[*_#@]/g, ' ').replace(/\s+/g, ' ').trim()
 
-  // Title case if ALL CAPS
+  // 6. Title case if ALL CAPS
   if (text.length > 3 && text === text.toUpperCase()) {
     text = text.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())
   }
