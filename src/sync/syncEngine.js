@@ -135,10 +135,11 @@ export async function pushOutbox(supabase, userId) {
   } catch (error) {
     console.error('Failed to push outbox changes:', error)
     const remaining = await getPendingMutations()
+    const msg = error?.message || error?.details || error?.hint || (typeof error === 'string' ? error : 'Sync push failed')
     updateStatus({
       state: 'error',
       pendingCount: remaining.length,
-      errorMessage: error.message || 'Sync push failed',
+      errorMessage: msg,
     })
     return { success: false, error }
   }
@@ -230,10 +231,11 @@ export async function deltaPull(supabase, userId, onRemoteChanges) {
   } catch (error) {
     console.error('Delta pull failed:', error)
     const remaining = await getPendingMutations()
+    const msg = error?.message || error?.details || error?.hint || (typeof error === 'string' ? error : 'Delta sync pull failed')
     updateStatus({
       state: 'error',
       pendingCount: remaining.length,
-      errorMessage: error.message || 'Delta sync pull failed',
+      errorMessage: msg,
     })
     return { success: false, error }
   }

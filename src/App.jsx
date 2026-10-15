@@ -220,7 +220,19 @@ export default function App() {
           <span>PennyWise</span>
           <small>
             Personal spending ·{' '}
-            <span className={`sync-status sync-${syncStatus}`} role="status" aria-live="polite" aria-atomic="true">
+            <span
+              className={`sync-status sync-${syncStatus}`}
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+              onClick={() => {
+                if (syncStatus === 'error' && syncInfo?.errorMessage) {
+                  alert(`Sync Error: ${syncInfo.errorMessage}`)
+                }
+              }}
+              style={syncStatus === 'error' ? { cursor: 'pointer', textDecoration: 'underline dotted' } : {}}
+              title={syncStatus === 'error' ? (syncInfo?.errorMessage || 'Tap to see error') : undefined}
+            >
               {syncStatus === 'cloud' || syncStatus === 'synced'
                 ? 'Saved to cloud'
                 : syncStatus === 'saving' || syncStatus === 'syncing'
@@ -228,7 +240,7 @@ export default function App() {
                   : syncStatus === 'pending'
                     ? `Pending sync (${syncInfo?.pendingCount || 0})`
                     : syncStatus === 'error'
-                      ? 'Sync failed'
+                      ? (syncInfo?.errorMessage ? `Sync failed: ${syncInfo.errorMessage.slice(0, 32)}...` : 'Sync failed')
                       : syncStatus === 'checking'
                         ? 'Checking sync...'
                         : 'Saved on this device'}
