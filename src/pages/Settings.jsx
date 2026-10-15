@@ -71,7 +71,7 @@ export default function Settings({
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = 'khaata-backup.json'
+    link.download = 'pennywise-backup.json'
     link.click()
     URL.revokeObjectURL(url)
     reportMessage('data', 'Backup downloaded.')

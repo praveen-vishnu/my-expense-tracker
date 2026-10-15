@@ -52,7 +52,7 @@ export function generateExpensesCSV(expenses = [], accounts = []) {
  * @param {string} csvContent
  * @param {string} filename
  */
-export function downloadCSV(csvContent, filename = 'khaata-expenses.csv') {
+export function downloadCSV(csvContent, filename = 'pennywise-expenses.csv') {
   if (typeof window === 'undefined' || typeof document === 'undefined') return
   const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)

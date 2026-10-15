@@ -1,11 +1,12 @@
 import { useState, useLayoutEffect, useCallback } from 'react'
 
-const THEME_KEY = 'khaata-theme'
+const THEME_KEY = 'pennywise-theme'
 
 export function useTheme() {
   const [theme, setTheme] = useState(() => {
     try {
-      return localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : 'light'
+      const stored = localStorage.getItem(THEME_KEY) || localStorage.getItem('khaata-theme')
+      return stored === 'dark' ? 'dark' : 'light'
     } catch {
       return 'light'
     }

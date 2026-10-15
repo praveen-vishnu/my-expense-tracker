@@ -1,6 +1,6 @@
-# Khaata
+# PennyWise
 
-Khaata is a personal expense tracker with monthly income, expense history, reviews, and Supabase sync.
+PennyWise is a smart personal finance, liquidity, and expense tracker with monthly income, account balances, pacing, burn rates, credit card settlement, and Supabase sync.
 
 ## Development
 

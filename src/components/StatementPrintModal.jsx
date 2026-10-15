@@ -51,7 +51,7 @@ export default function StatementPrintModal({
         <div className="printable-statement" id="printable-statement-area">
           <header className="statement-header">
             <div className="statement-brand">
-              <h1>Khaata</h1>
+              <h1>PennyWise</h1>
               <p>Personal Financial Statement & Expense Log</p>
             </div>
             <div className="statement-meta-info">
@@ -121,7 +121,7 @@ export default function StatementPrintModal({
           </div>
 
           <footer className="statement-footer">
-            <p>Generated automatically via Khaata · Private & client-side verified.</p>
+            <p>Generated automatically via PennyWise · Private & client-side verified.</p>
           </footer>
         </div>
       </div>

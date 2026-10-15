@@ -4,13 +4,18 @@ import { predictCategory } from './csvParser.js'
 /**
  * Storage key for user-configured Gemini API Key in localStorage
  */
-export const GEMINI_API_KEY_STORAGE = 'khaata_gemini_api_key'
+export const GEMINI_API_KEY_STORAGE = 'pennywise_gemini_api_key'
 
 export function getStoredGeminiKey() {
   if (typeof window === 'undefined' || !window.localStorage) {
     return import.meta.env.VITE_GEMINI_API_KEY || ''
   }
-  return window.localStorage.getItem(GEMINI_API_KEY_STORAGE) || import.meta.env.VITE_GEMINI_API_KEY || ''
+  return (
+    window.localStorage.getItem(GEMINI_API_KEY_STORAGE) ||
+    window.localStorage.getItem('khaata_gemini_api_key') ||
+    import.meta.env.VITE_GEMINI_API_KEY ||
+    ''
+  )
 }
 
 export function saveStoredGeminiKey(key) {

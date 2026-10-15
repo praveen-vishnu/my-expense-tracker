@@ -115,7 +115,7 @@ export default function History({
   // Export handlers
   function handleExportCSV() {
     const csv = generateExpensesCSV(filteredList, data.accounts || [])
-    const filename = `khaata-${dateScope === 'month' ? month : 'all-expenses'}.csv`
+    const filename = `pennywise-${dateScope === 'month' ? month : 'all-expenses'}.csv`
     downloadCSV(csv, filename)
   }
 

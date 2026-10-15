@@ -211,7 +211,7 @@ export default function App() {
       <a className="skip-link" href="#main-content">Skip to main content</a>
       <header className="topbar">
         <div className="brand">
-          <span>Khaata</span>
+          <span>PennyWise</span>
           <small>
             Personal spending ·{' '}
             <span className={`sync-status sync-${syncStatus}`} role="status" aria-live="polite" aria-atomic="true">

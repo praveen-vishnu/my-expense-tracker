@@ -97,7 +97,7 @@ export default function AuthForm({ onAuthenticated, recovery = false, theme, onT
         </h1>
         <p className="auth-copy">
           {recovery
-            ? 'Choose a new password for your Khaata account.'
+            ? 'Choose a new password for your PennyWise account.'
             : mode === 'sign-in'
               ? 'Sign in to access your expenses from any device.'
               : mode === 'magic-link'
