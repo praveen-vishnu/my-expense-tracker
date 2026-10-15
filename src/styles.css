@@ -153,12 +153,39 @@ h2 {
   font-weight: 600;
 }
 
-.sync-cloud {
+.sync-cloud,
+.sync-synced {
   color: var(--pine);
 }
 
-.sync-saving {
+.sync-saving,
+.sync-syncing {
   color: #805000;
+}
+
+.sync-pending {
+  color: #b45309;
+}
+
+.sync-error {
+  color: var(--danger, #dc2626);
+}
+
+.sync-retry-btn {
+  margin-left: 0.45rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  background: var(--danger, #dc2626);
+  color: #ffffff;
+  border: none;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.sync-retry-btn:hover {
+  opacity: 0.9;
 }
 
 .sync-local,
@@ -1407,6 +1434,38 @@ h2 {
 
 .add-desktop {
   justify-self: end;
+}
+
+.suggestion-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.4rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--pine);
+  background: rgba(31, 111, 84, 0.08);
+  color: var(--pine);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  width: fit-content;
+}
+
+.suggestion-pill:hover {
+  background: var(--pine);
+  color: #ffffff;
+}
+
+:root[data-theme='dark'] .suggestion-pill {
+  background: rgba(216, 236, 225, 0.1);
+  color: #d8ece1;
+  border-color: #d8ece1;
+}
+
+:root[data-theme='dark'] .suggestion-pill:hover {
+  background: #d8ece1;
+  color: #19241f;
 }
 
 @media (max-width: 760px) {

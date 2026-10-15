@@ -47,6 +47,8 @@ export default function App() {
     data,
     ready,
     syncStatus,
+    syncInfo,
+    retrySync,
     upsertExpense,
     deleteExpense,
     importBatchExpenses,
@@ -219,19 +221,43 @@ export default function App() {
           <small>
             Personal spending ·{' '}
             <span className={`sync-status sync-${syncStatus}`} role="status" aria-live="polite" aria-atomic="true">
-              {syncStatus === 'cloud'
+              {syncStatus === 'cloud' || syncStatus === 'synced'
                 ? 'Saved to cloud'
-                : syncStatus === 'saving'
-                  ? 'Saving...'
-                  : syncStatus === 'checking'
-                    ? 'Checking sync...'
-                    : 'Saved on this device'}
+                : syncStatus === 'saving' || syncStatus === 'syncing'
+                  ? 'Syncing...'
+                  : syncStatus === 'pending'
+                    ? `Pending sync (${syncInfo?.pendingCount || 0})`
+                    : syncStatus === 'error'
+                      ? 'Sync failed'
+                      : syncStatus === 'checking'
+                        ? 'Checking sync...'
+                        : 'Saved on this device'}
             </span>
+            {syncStatus === 'error' && (
+              <button
+                type="button"
+                className="sync-retry-btn"
+                onClick={retrySync}
+                title={syncInfo?.errorMessage || 'Retry sync'}
+              >
+                Retry
+              </button>
+            )}
           </small>
         </div>
         <MonthSelector month={month} onChange={setMonth} />
         <div className="topbar-actions">
           <ThemeToggle theme={theme} onToggle={toggleTheme} />
+          <button
+            type="button"
+            className="btn btn-secondary topbar-btn"
+            onClick={() => setScanReceiptModal(true)}
+            title="Scan receipt or UPI screenshot"
+            aria-label="Scan receipt or UPI screenshot"
+          >
+            <IconCamera size={16} />
+            <span className="btn-label-desktop">Scan</span>
+          </button>
           <button
             type="button"
             className="btn btn-secondary topbar-btn"

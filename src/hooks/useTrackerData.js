@@ -1,38 +1,142 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { emptyData, loadData, saveData, normalizeData } from '../utils/storage.js'
+import { emptyData, loadData, saveData, normalizeData, saveLocalData } from '../utils/storage.js'
 import { addRecurringExpenses } from '../utils/recurring.js'
 import { createId, isValidDate } from '../utils/formatting.js'
-import { isSupabaseConfigured } from '../utils/supabase.js'
+import { isSupabaseConfigured, supabase } from '../utils/supabase.js'
+import { enqueueMutation } from '../sync/outbox.js'
+import {
+  sync,
+  pushOutbox,
+  initAutoSync,
+  subscribeSyncStatus,
+  getSyncStatus,
+} from '../sync/syncEngine.js'
 
 const DEBOUNCE_SAVE_MS = 350
 
 export function useTrackerData(authReady, authUser, month) {
   const [data, setData] = useState(() => emptyData())
   const [ready, setReady] = useState(false)
-  const [syncStatus, setSyncStatus] = useState('checking')
+  const [syncInfo, setSyncInfo] = useState(() => getSyncStatus())
+  const [legacySyncStatus, setLegacySyncStatus] = useState('checking')
   const saveTimeoutRef = useRef(null)
   const isInitialLoadRef = useRef(true)
+  const dataRef = useRef(data)
 
-  // 1. Initial Load
+  useEffect(() => {
+    dataRef.current = data
+  }, [data])
+
+  // Handle remote deltas coming from deltaPull
+  const handleRemoteChange = useCallback(({ table, id, record, isDeleted }) => {
+    setData((current) => {
+      let next = { ...current }
+
+      if (table === 'expenses') {
+        const remaining = current.expenses.filter((e) => e.id !== id)
+        next.expenses = isDeleted || !record ? remaining : [record, ...remaining]
+      } else if (table === 'accounts') {
+        const remaining = (current.accounts || []).filter((a) => a.id !== id)
+        next.accounts = isDeleted || !record ? remaining : [...remaining, record]
+      } else if (table === 'transfers') {
+        const remaining = (current.transfers || []).filter((t) => t.id !== id)
+        next.transfers = isDeleted || !record ? remaining : [record, ...remaining]
+      } else if (table === 'recurring_schedules') {
+        const remaining = (current.recurringExpenses || []).filter((r) => r.id !== id)
+        next.recurringExpenses = isDeleted || !record ? remaining : [...remaining, record]
+      } else if (table === 'category_budgets') {
+        const [monthKey, ...catParts] = id.split('_')
+        const cat = catParts.join('_')
+        const currentMonthBudgets = { ...(current.categoryBudgets?.[monthKey] || {}) }
+        if (isDeleted || !record) {
+          delete currentMonthBudgets[cat]
+        } else {
+          currentMonthBudgets[cat] = record.amount
+        }
+        next.categoryBudgets = {
+          ...(current.categoryBudgets || {}),
+          [monthKey]: currentMonthBudgets,
+        }
+      } else if (table === 'incomes') {
+        const monthKey = id
+        const nextIncome = { ...current.income }
+        const nextIncomeAccounts = { ...(current.incomeAccounts || {}) }
+        if (isDeleted || !record) {
+          delete nextIncome[monthKey]
+          delete nextIncomeAccounts[monthKey]
+        } else {
+          nextIncome[monthKey] = record.amount
+          if (record.accountId) {
+            nextIncomeAccounts[monthKey] = record.accountId
+          } else {
+            delete nextIncomeAccounts[monthKey]
+          }
+        }
+        next.income = nextIncome
+        next.incomeAccounts = nextIncomeAccounts
+      } else if (table === 'budgets') {
+        const monthKey = id
+        const nextBudgets = { ...current.budgets }
+        if (isDeleted || !record) {
+          delete nextBudgets[monthKey]
+        } else {
+          nextBudgets[monthKey] = record.amount
+        }
+        next.budgets = nextBudgets
+      }
+
+      saveLocalData(next)
+      return next
+    })
+  }, [])
+
+  // Subscribe to sync status updates
+  useEffect(() => {
+    return subscribeSyncStatus((status) => {
+      setSyncInfo(status)
+      if (status.state === 'synced') {
+        setLegacySyncStatus(isSupabaseConfigured && authUser ? 'cloud' : 'local')
+      } else if (status.state === 'syncing') {
+        setLegacySyncStatus('saving')
+      } else if (status.state === 'pending') {
+        setLegacySyncStatus('pending')
+      } else if (status.state === 'error') {
+        setLegacySyncStatus('error')
+      }
+    })
+  }, [authUser])
+
+  // 1. Initial Load & Setup Auto-Sync
   useEffect(() => {
     if (!authReady || !authUser) return undefined
     let active = true
     setReady(false)
-    setSyncStatus('checking')
+    setLegacySyncStatus('checking')
 
-    loadData().then((loadedData) => {
+    loadData().then(async (loadedData) => {
       if (!active) return
       const withRecurring = addRecurringExpenses(loadedData, month)
       setData(withRecurring)
       setReady(true)
-      setSyncStatus(isSupabaseConfigured ? 'cloud' : 'local')
       isInitialLoadRef.current = false
+
+      if (isSupabaseConfigured && supabase && authUser?.id) {
+        // Run initial delta pull & outbox flush
+        await sync(supabase, authUser.id, handleRemoteChange)
+      }
     })
+
+    const cleanupAutoSync = initAutoSync(
+      () => supabase,
+      () => authUser?.id,
+      handleRemoteChange
+    )
 
     return () => {
       active = false
+      cleanupAutoSync()
     }
-  }, [authReady, authUser])
+  }, [authReady, authUser, handleRemoteChange, month])
 
   // 2. Materialize recurring expenses when month changes
   useEffect(() => {
@@ -40,18 +144,19 @@ export function useTrackerData(authReady, authUser, month) {
     setData((current) => addRecurringExpenses(current, month))
   }, [month, ready])
 
-  // 3. Debounced Save Effect
+  // 3. Debounced Snapshot Backup Effect
   useEffect(() => {
     if (!ready || isInitialLoadRef.current) return
 
-    setSyncStatus('saving')
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current)
     }
 
     saveTimeoutRef.current = setTimeout(() => {
-      saveData(data).then((result) => {
-        setSyncStatus(result.remoteSaved ? 'cloud' : 'local')
+      saveData(dataRef.current).then(() => {
+        if (isSupabaseConfigured && supabase && authUser?.id) {
+          pushOutbox(supabase, authUser.id)
+        }
       })
     }, DEBOUNCE_SAVE_MS)
 
@@ -60,11 +165,21 @@ export function useTrackerData(authReady, authUser, month) {
         clearTimeout(saveTimeoutRef.current)
       }
     }
-  }, [data, ready])
+  }, [data, ready, authUser])
 
   // Mutation Handlers
   const upsertExpense = useCallback((fields, existingId) => {
     if (!isValidDate(fields.date)) return
+    const id = existingId || createId()
+    const record = { id, ...fields }
+
+    enqueueMutation({
+      table: 'expenses',
+      id,
+      op: 'upsert',
+      payload: record,
+    })
+
     setData((current) => {
       if (existingId) {
         return {
@@ -76,12 +191,13 @@ export function useTrackerData(authReady, authUser, month) {
       }
       return {
         ...current,
-        expenses: [{ id: createId(), ...fields }, ...current.expenses],
+        expenses: [record, ...current.expenses],
       }
     })
   }, [])
 
   const deleteExpense = useCallback((expenseId) => {
+    enqueueMutation({ table: 'expenses', id: expenseId, op: 'delete' })
     setData((current) => ({
       ...current,
       expenses: current.expenses.filter((item) => item.id !== expenseId),
@@ -90,6 +206,9 @@ export function useTrackerData(authReady, authUser, month) {
 
   const importBatchExpenses = useCallback((newExpenses) => {
     if (!Array.isArray(newExpenses) || !newExpenses.length) return
+    for (const exp of newExpenses) {
+      enqueueMutation({ table: 'expenses', id: exp.id, op: 'upsert', payload: exp })
+    }
     setData((current) => ({
       ...current,
       expenses: [...newExpenses, ...current.expenses],
@@ -99,6 +218,9 @@ export function useTrackerData(authReady, authUser, month) {
   const deleteBatchExpenses = useCallback((expenseIds) => {
     if (!Array.isArray(expenseIds) || !expenseIds.length) return
     const idSet = new Set(expenseIds)
+    for (const id of expenseIds) {
+      enqueueMutation({ table: 'expenses', id, op: 'delete' })
+    }
     setData((current) => ({
       ...current,
       expenses: current.expenses.filter((item) => !idSet.has(item.id)),
@@ -108,15 +230,25 @@ export function useTrackerData(authReady, authUser, month) {
   const updateBatchExpenses = useCallback((expenseIds, fields) => {
     if (!Array.isArray(expenseIds) || !expenseIds.length || !fields) return
     const idSet = new Set(expenseIds)
-    setData((current) => ({
-      ...current,
-      expenses: current.expenses.map((item) =>
-        idSet.has(item.id) ? { ...item, ...fields } : item
-      ),
-    }))
+    setData((current) => {
+      const updatedExpenses = current.expenses.map((item) => {
+        if (!idSet.has(item.id)) return item
+        const updated = { ...item, ...fields }
+        enqueueMutation({ table: 'expenses', id: item.id, op: 'upsert', payload: updated })
+        return updated
+      })
+      return { ...current, expenses: updatedExpenses }
+    })
   }, [])
 
   const saveIncome = useCallback((monthKey, amount, accountId = null) => {
+    enqueueMutation({
+      table: 'incomes',
+      id: monthKey,
+      op: 'upsert',
+      payload: { month: monthKey, amount, accountId },
+    })
+
     setData((current) => {
       const nextIncome = { ...current.income, [monthKey]: amount }
       const nextIncomeAccounts = { ...(current.incomeAccounts || {}) }
@@ -134,6 +266,7 @@ export function useTrackerData(authReady, authUser, month) {
   }, [])
 
   const deleteIncome = useCallback((monthKey) => {
+    enqueueMutation({ table: 'incomes', id: monthKey, op: 'delete' })
     setData((current) => {
       const next = { ...current.income }
       delete next[monthKey]
@@ -177,11 +310,10 @@ export function useTrackerData(authReady, authUser, month) {
   }, [])
 
   const settleSplitExpense = useCallback((expenseId, settledAccountId, settledDate = new Date().toISOString().slice(0, 10)) => {
-    setData((current) => ({
-      ...current,
-      expenses: current.expenses.map((e) => {
+    setData((current) => {
+      const updatedExpenses = current.expenses.map((e) => {
         if (e.id !== expenseId || !e.split) return e
-        return {
+        const updated = {
           ...e,
           split: {
             ...e.split,
@@ -190,11 +322,21 @@ export function useTrackerData(authReady, authUser, month) {
             settledAccountId: settledAccountId || null,
           },
         }
-      }),
-    }))
+        enqueueMutation({ table: 'expenses', id: e.id, op: 'upsert', payload: updated })
+        return updated
+      })
+      return { ...current, expenses: updatedExpenses }
+    })
   }, [])
 
   const saveBudget = useCallback((monthKey, amount) => {
+    enqueueMutation({
+      table: 'budgets',
+      id: monthKey,
+      op: 'upsert',
+      payload: { month: monthKey, amount },
+    })
+
     setData((current) => ({
       ...current,
       budgets: { ...current.budgets, [monthKey]: amount },
@@ -204,6 +346,23 @@ export function useTrackerData(authReady, authUser, month) {
   const saveCategoryBudget = useCallback((monthKey, categoryName, amount) => {
     const val = Number(amount)
     if (!monthKey || !categoryName) return
+    const id = `${monthKey}_${categoryName}`
+
+    if (Number.isFinite(val) && val > 0) {
+      enqueueMutation({
+        table: 'category_budgets',
+        id,
+        op: 'upsert',
+        payload: { id, month: monthKey, category: categoryName, amount: val },
+      })
+    } else {
+      enqueueMutation({
+        table: 'category_budgets',
+        id,
+        op: 'delete',
+      })
+    }
+
     setData((current) => {
       const monthBudgets = { ...(current.categoryBudgets?.[monthKey] || {}) }
       if (Number.isFinite(val) && val > 0) {
@@ -222,6 +381,9 @@ export function useTrackerData(authReady, authUser, month) {
   }, [])
 
   const deleteCategoryBudget = useCallback((monthKey, categoryName) => {
+    const id = `${monthKey}_${categoryName}`
+    enqueueMutation({ table: 'category_budgets', id, op: 'delete' })
+
     setData((current) => {
       const monthBudgets = { ...(current.categoryBudgets?.[monthKey] || {}) }
       delete monthBudgets[categoryName]
@@ -239,6 +401,14 @@ export function useTrackerData(authReady, authUser, month) {
     if (!fromMonth || !toMonth) return
     setData((current) => {
       const source = current.categoryBudgets?.[fromMonth] || {}
+      for (const [cat, amt] of Object.entries(source)) {
+        enqueueMutation({
+          table: 'category_budgets',
+          id: `${toMonth}_${cat}`,
+          op: 'upsert',
+          payload: { id: `${toMonth}_${cat}`, month: toMonth, category: cat, amount: amt },
+        })
+      }
       return {
         ...current,
         categoryBudgets: {
@@ -250,6 +420,12 @@ export function useTrackerData(authReady, authUser, month) {
   }, [])
 
   const addRecurringExpense = useCallback((schedule) => {
+    enqueueMutation({
+      table: 'recurring_schedules',
+      id: schedule.id,
+      op: 'upsert',
+      payload: schedule,
+    })
     setData((current) => ({
       ...current,
       recurringExpenses: [...current.recurringExpenses, schedule],
@@ -257,6 +433,7 @@ export function useTrackerData(authReady, authUser, month) {
   }, [])
 
   const deleteRecurringExpense = useCallback((scheduleId) => {
+    enqueueMutation({ table: 'recurring_schedules', id: scheduleId, op: 'delete' })
     setData((current) => ({
       ...current,
       recurringExpenses: current.recurringExpenses.filter((item) => item.id !== scheduleId),
@@ -276,6 +453,12 @@ export function useTrackerData(authReady, authUser, month) {
   }, [])
 
   const addAccount = useCallback((account) => {
+    enqueueMutation({
+      table: 'accounts',
+      id: account.id,
+      op: 'upsert',
+      payload: account,
+    })
     setData((current) => ({
       ...current,
       accounts: [...(current.accounts || []), account],
@@ -283,19 +466,35 @@ export function useTrackerData(authReady, authUser, month) {
   }, [])
 
   const updateAccount = useCallback((accountId, fields) => {
-    setData((current) => ({
-      ...current,
-      accounts: (current.accounts || []).map((acc) =>
-        acc.id === accountId ? { ...acc, ...fields } : acc
-      ),
-    }))
+    setData((current) => {
+      const updatedAccounts = (current.accounts || []).map((acc) => {
+        if (acc.id !== accountId) return acc
+        const updated = { ...acc, ...fields }
+        enqueueMutation({
+          table: 'accounts',
+          id: accountId,
+          op: 'upsert',
+          payload: updated,
+        })
+        return updated
+      })
+      return { ...current, accounts: updatedAccounts }
+    })
   }, [])
 
   const deleteAccount = useCallback((accountId) => {
+    enqueueMutation({ table: 'accounts', id: accountId, op: 'delete' })
     setData((current) => {
       const remaining = (current.accounts || []).filter((acc) => acc.id !== accountId)
+      // Fix: immutable update for default account
       if (remaining.length && !remaining.some((a) => a.isDefault)) {
-        remaining[0].isDefault = true
+        remaining[0] = { ...remaining[0], isDefault: true }
+        enqueueMutation({
+          table: 'accounts',
+          id: remaining[0].id,
+          op: 'upsert',
+          payload: remaining[0],
+        })
       }
       return {
         ...current,
@@ -324,6 +523,12 @@ export function useTrackerData(authReady, authUser, month) {
       id: createId(),
       ...transfer,
     }
+    enqueueMutation({
+      table: 'transfers',
+      id: newTransfer.id,
+      op: 'upsert',
+      payload: newTransfer,
+    })
     setData((current) => ({
       ...current,
       transfers: [newTransfer, ...(current.transfers || [])],
@@ -331,6 +536,7 @@ export function useTrackerData(authReady, authUser, month) {
   }, [])
 
   const deleteTransfer = useCallback((transferId) => {
+    enqueueMutation({ table: 'transfers', id: transferId, op: 'delete' })
     setData((current) => ({
       ...current,
       transfers: (current.transfers || []).filter((t) => t.id !== transferId),
@@ -338,28 +544,47 @@ export function useTrackerData(authReady, authUser, month) {
   }, [])
 
   const setDefaultAccount = useCallback((accountId) => {
-    setData((current) => ({
-      ...current,
-      accounts: (current.accounts || []).map((acc) => ({
-        ...acc,
-        isDefault: acc.id === accountId,
-      })),
-    }))
+    setData((current) => {
+      const updatedAccounts = (current.accounts || []).map((acc) => {
+        const isDefault = acc.id === accountId
+        const updated = { ...acc, isDefault }
+        enqueueMutation({
+          table: 'accounts',
+          id: acc.id,
+          op: 'upsert',
+          payload: updated,
+        })
+        return updated
+      })
+      return { ...current, accounts: updatedAccounts }
+    })
   }, [])
 
+  const retrySync = useCallback(async () => {
+    if (isSupabaseConfigured && supabase && authUser?.id) {
+      await sync(supabase, authUser.id, handleRemoteChange)
+    }
+  }, [authUser, handleRemoteChange])
+
   const importData = useCallback((imported) => {
-    setData(normalizeData(imported))
+    const normalized = normalizeData(imported)
+    setData(normalized)
+    saveLocalData(normalized)
   }, [])
 
   const clearAllData = useCallback(() => {
-    setData(emptyData())
+    const cleared = emptyData()
+    setData(cleared)
+    saveLocalData(cleared)
   }, [])
 
   return {
     data,
     setData,
     ready,
-    syncStatus,
+    syncStatus: legacySyncStatus,
+    syncInfo,
+    retrySync,
     upsertExpense,
     deleteExpense,
     importBatchExpenses,

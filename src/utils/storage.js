@@ -264,19 +264,41 @@ export function normalizeData(raw) {
   }
 }
 
-function loadLocalData() {
+import { idbGet, idbSet } from '../sync/idb.js'
+
+export async function loadLocalData() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return emptyData()
-    return normalizeData(JSON.parse(raw))
+    const idbRecord = await idbGet('data_store', 'current_data')
+    if (idbRecord) {
+      return normalizeData(idbRecord)
+    }
+
+    if (typeof localStorage !== 'undefined') {
+      const raw = localStorage.getItem(STORAGE_KEY)
+      if (raw) {
+        const normalized = normalizeData(JSON.parse(raw))
+        await idbSet('data_store', 'current_data', normalized)
+        return normalized
+      }
+    }
+
+    return emptyData()
   } catch {
     return emptyData()
   }
 }
 
-function saveLocalData(data) {
+export async function saveLocalData(data) {
+  const normalized = normalizeData(data)
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeData(data)))
+    await idbSet('data_store', 'current_data', normalized)
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized))
+      } catch {
+        // localStorage quota might be exceeded, IDB is primary
+      }
+    }
     return true
   } catch {
     return false
@@ -294,7 +316,7 @@ async function getSupabaseUser() {
 }
 
 export async function loadData() {
-  const localData = loadLocalData()
+  const localData = await loadLocalData()
   if (!isSupabaseConfigured) return localData
 
   try {
@@ -343,7 +365,7 @@ async function saveCategories(userId, categories) {
 
 export async function saveData(data) {
   const normalized = normalizeData(data)
-  const localSaved = saveLocalData(normalized)
+  const localSaved = await saveLocalData(normalized)
   if (!isSupabaseConfigured) {
     return { localSaved, remoteSaved: false, error: 'Supabase environment variables are missing.' }
   }

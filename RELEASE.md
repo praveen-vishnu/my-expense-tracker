@@ -2,7 +2,7 @@
 
 ## Version source
 
-The version in `package.json` is the single source of truth. Khaata uses Semantic Versioning:
+The version in `package.json` is the single source of truth. PennyWise uses Semantic Versioning:
 
 - `MAJOR`: incompatible product or data changes.
 - `MINOR`: backward-compatible features.

@@ -122,7 +122,7 @@ export async function parseReceiptWithGemini(fileOrBase64, mimeType = 'image/jpe
       return { ok: false, error: 'Invalid image format provided.' }
     }
 
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`
+    const endpoint = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent'
 
     const payload = {
       contents: [
@@ -146,7 +146,10 @@ export async function parseReceiptWithGemini(fileOrBase64, mimeType = 'image/jpe
 
     const response = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      },
       body: JSON.stringify(payload),
     })
 

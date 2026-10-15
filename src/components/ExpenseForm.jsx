@@ -1,5 +1,6 @@
 import { useRef, useState, useMemo } from 'react'
 import { isValidDate, parseAmount, todayISO, formatINR } from '../utils/formatting.js'
+import { predictCategory } from '../utils/csvParser.js'
 import ModalSheet from './ModalSheet.jsx'
 import { IconUsers, IconCalculator } from '@tabler/icons-react'
 
@@ -10,12 +11,19 @@ export default function ExpenseForm({
   onSave,
   onCancel,
 }) {
+  const savedCategory = typeof localStorage !== 'undefined' ? localStorage.getItem('pennywise_last_category') : null
+  const initialCategory = initial?.category || (savedCategory && categories.includes(savedCategory) ? savedCategory : categories[0] || '')
+
+  const savedAccount = typeof localStorage !== 'undefined' ? localStorage.getItem('pennywise_last_account') : null
+  const defaultAccId = (savedAccount && accounts.some((a) => a.id === savedAccount))
+    ? savedAccount
+    : (accounts.find((a) => a.isDefault)?.id || accounts[0]?.id || '')
+
   const [amount, setAmount] = useState(initial?.amount ? String(initial.amount) : '')
-  const [category, setCategory] = useState(initial?.category || categories[0] || '')
+  const [category, setCategory] = useState(initialCategory)
   const [date, setDate] = useState(initial?.date || todayISO())
   const [note, setNote] = useState(initial?.note || '')
-
-  const defaultAccId = accounts.find((a) => a.isDefault)?.id || accounts[0]?.id || ''
+  const [suggestedCategory, setSuggestedCategory] = useState(null)
   const [accountId, setAccountId] = useState(initial?.accountId || defaultAccId)
 
   // Split expense states
@@ -66,6 +74,20 @@ export default function ExpenseForm({
     }
   }
 
+  function handleNoteChange(val) {
+    setNote(val)
+    if (val && val.trim().length >= 3) {
+      const predicted = predictCategory(val, categories)
+      if (predicted && predicted !== category && predicted !== 'Other') {
+        setSuggestedCategory(predicted)
+      } else {
+        setSuggestedCategory(null)
+      }
+    } else {
+      setSuggestedCategory(null)
+    }
+  }
+
   function handleSubmit(event) {
     event.preventDefault()
     const value = parseAmount(amount)
@@ -91,6 +113,13 @@ export default function ExpenseForm({
         setError({ field: 'split', message: 'Your share must be between 0 and the total amount.' })
         return
       }
+    }
+
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem('pennywise_last_category', category)
+        if (accountId) localStorage.setItem('pennywise_last_account', accountId)
+      } catch {}
     }
 
     setError(null)
@@ -221,10 +250,22 @@ export default function ExpenseForm({
           <input
             type="text"
             value={note}
-            onChange={(event) => setNote(event.target.value)}
-            placeholder="Lunch / Kirana / Fuel"
+            onChange={(event) => handleNoteChange(event.target.value)}
+            placeholder="e.g. Swiggy, Uber, Kirana, Fuel"
             maxLength={80}
           />
+          {suggestedCategory && (
+            <button
+              type="button"
+              className="suggestion-pill"
+              onClick={() => {
+                setCategory(suggestedCategory)
+                setSuggestedCategory(null)
+              }}
+            >
+              💡 Switch to <strong>{suggestedCategory}</strong>
+            </button>
+          )}
         </label>
 
         {/* SPLIT BILL SECTION */}

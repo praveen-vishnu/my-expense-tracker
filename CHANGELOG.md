@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Khaata are documented here.
+All notable changes to PennyWise are documented here.
 
 This project follows [Semantic Versioning](https://semver.org/).
 
