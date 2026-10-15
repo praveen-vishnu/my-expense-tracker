@@ -62,7 +62,21 @@ export async function pushOutbox(supabase, userId) {
   const successfullyPushedIds = []
 
   try {
-    for (const [table, tableMutations] of byTable.entries()) {
+    // Push in dependency order so foreign keys (accounts) exist before expenses/transfers
+    const tablePushOrder = [
+      'accounts',
+      'expenses',
+      'transfers',
+      'recurring_schedules',
+      'category_budgets',
+      'incomes',
+      'budgets',
+    ]
+
+    for (const table of tablePushOrder) {
+      const tableMutations = byTable.get(table)
+      if (!tableMutations || !tableMutations.length) continue
+
       const config = TABLE_CONFIGS[table]
       if (!config) continue
 
@@ -83,9 +97,25 @@ export async function pushOutbox(supabase, userId) {
       // 1. Process Upserts
       if (upserts.length > 0) {
         const rows = upserts.map((u) => u.row)
-        const { error } = await supabase
+        let { error } = await supabase
           .from(table)
           .upsert(rows, { onConflict: config.primaryKey })
+
+        // Self-healing for foreign key violation: if an expense, income or recurring references an account that was deleted or missing remotely,
+        // retry the upsert with account_id = null rather than permanently blocking the outbox.
+        if (error && (error.code === '23503' || error.message?.includes('violates foreign key constraint'))) {
+          console.warn(`Foreign key violation on ${table}. Retrying upsert with nullified account_id...`, error)
+          const sanitizedRows = rows.map((r) => {
+            const next = { ...r }
+            if ('account_id' in next) next.account_id = null
+            if ('from_account_id' in next && 'to_account_id' in next) {
+              // If transfer fails FK, we cannot just nullify required FKs, skip
+            }
+            return next
+          })
+          const retryRes = await supabase.from(table).upsert(sanitizedRows, { onConflict: config.primaryKey })
+          error = retryRes.error
+        }
 
         if (error) {
           if (error.code === 'PGRST205' || error.message?.includes('schema cache')) {
@@ -277,17 +307,31 @@ export async function backfillNormalizedTables(supabase, userId, currentData) {
     console.info('Backfilling normalized per-row tables from existing dataset...')
 
     // 1. Accounts
+    const validAccountIds = new Set()
     if (Array.isArray(currentData.accounts) && currentData.accounts.length) {
       const rows = currentData.accounts.map((a) => TABLE_CONFIGS.accounts.toRow(a, userId))
       await supabase.from('accounts').upsert(rows, { onConflict: 'id' })
+      rows.forEach((r) => validAccountIds.add(r.id))
     }
 
-    // 2. Expenses
+    // 2. Expenses (sanitize orphaned account_id to null if account does not exist)
     if (Array.isArray(currentData.expenses) && currentData.expenses.length) {
-      const rows = currentData.expenses.map((e) => TABLE_CONFIGS.expenses.toRow(e, userId))
+      const rows = currentData.expenses.map((e) => {
+        const row = TABLE_CONFIGS.expenses.toRow(e, userId)
+        if (row.account_id && !validAccountIds.has(row.account_id)) {
+          row.account_id = null
+        }
+        return row
+      })
       // Batch in chunks of 500
       for (let i = 0; i < rows.length; i += 500) {
-        await supabase.from('expenses').upsert(rows.slice(i, i + 500), { onConflict: 'id' })
+        let chunk = rows.slice(i, i + 500)
+        let { error: expErr } = await supabase.from('expenses').upsert(chunk, { onConflict: 'id' })
+        if (expErr && expErr.code === '23503') {
+          // Fallback: strip account_id if foreign key violation
+          chunk = chunk.map((r) => ({ ...r, account_id: null }))
+          await supabase.from('expenses').upsert(chunk, { onConflict: 'id' })
+        }
       }
     }
 
