@@ -41,6 +41,7 @@ export default function StatementImportModal({
       setSummaryInfo({
         totalParsed: result.totalParsed,
         duplicateCount: result.duplicateCount,
+        recurringCount: result.recurringCount || 0,
       })
     } catch (err) {
       setError(`Failed to read statement: ${err.message || 'Unknown error'}`)
@@ -73,22 +74,27 @@ export default function StatementImportModal({
   }
 
   function handleConfirmImport() {
-    const toImport = (transactions || [])
-      .filter((t) => t.selected)
-      .map((t) => ({
-        id: t.id,
-        date: t.date,
-        amount: t.amount,
-        category: t.category,
-        note: t.note,
-        accountId: selectedAccountId || null,
-      }))
+    const selected = (transactions || []).filter((t) => t.selected)
+    const toImport = selected.map((t) => ({
+      id: t.id,
+      date: t.date,
+      amount: t.amount,
+      category: t.category,
+      note: t.note,
+      accountId: selectedAccountId || null,
+    }))
 
     if (!toImport.length) {
       setError('No transactions selected for import.')
+      return
     }
 
-    onImportBatch(toImport)
+    // Collect any recurring expenses that the user explicitly chose to import/replace
+    const replacedRecurringIds = selected
+      .filter((t) => t.isRecurringMatch && t.matchedExpenseId)
+      .map((t) => t.matchedExpenseId)
+
+    onImportBatch(toImport, replacedRecurringIds)
     onDismiss()
   }
 
@@ -177,7 +183,12 @@ export default function StatementImportModal({
               {summaryInfo?.duplicateCount > 0 ? (
                 <div className="duplicate-alert">
                   <IconAlertTriangle size={16} />
-                  <span>{summaryInfo.duplicateCount} duplicate{summaryInfo.duplicateCount > 1 ? 's' : ''} auto-unselected</span>
+                  <span>
+                    {summaryInfo.duplicateCount} duplicate{summaryInfo.duplicateCount > 1 ? 's' : ''} auto-unselected
+                    {summaryInfo?.recurringCount > 0
+                      ? ` (${summaryInfo.recurringCount} recurring EMI/Rent/Bills matched)`
+                      : ''}
+                  </span>
                 </div>
               ) : null}
               <div className="batch-toggle-btns">
@@ -215,7 +226,14 @@ export default function StatementImportModal({
                       <td className="table-date">{formatShortDate(t.date)}</td>
                       <td>
                         <strong>{t.note}</strong>
-                        {t.isDuplicate ? (
+                        {t.isRecurringMatch ? (
+                          <span
+                            className="dup-badge recurring-badge"
+                            title="Matches an existing recurring schedule for this month"
+                          >
+                            Matches recurring ({t.matchedNote || t.category})
+                          </span>
+                        ) : t.isDuplicate ? (
                           <span className="dup-badge">Already logged</span>
                         ) : null}
                       </td>

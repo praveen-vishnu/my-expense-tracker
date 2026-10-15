@@ -324,6 +324,7 @@ export function parseBankStatementRows(rows, options = {}) {
 
   const candidates = []
   let duplicateCount = 0
+  let recurringCount = 0
 
   for (let r = headerIndex + 1; r < rows.length; r++) {
     const row = rows[r]
@@ -373,17 +374,61 @@ export function parseBankStatementRows(rows, options = {}) {
     const cleanedNote = cleanNarration(rawNarration)
     const category = predictCategory(rawNarration + ' ' + cleanedNote, availableCategories)
 
-    // Check for duplicate against existing expenses
-    const isDuplicate = existingExpenses.some(
+    // Check for duplicate or recurring match against existing expenses
+    // 1. Exact match (same date, same amount, and note/category overlap)
+    let matchedExpense = existingExpenses.find(
       (exp) =>
         exp.date === isoDate &&
         Math.abs(exp.amount - amount) < 0.01 &&
-        (exp.note.toLowerCase().includes(cleanedNote.toLowerCase()) ||
-          cleanedNote.toLowerCase().includes(exp.note.toLowerCase()) ||
-          exp.category === category)
+        (exp.category?.toLowerCase() === category?.toLowerCase() ||
+          (exp.note && cleanedNote && (
+            exp.note.toLowerCase().includes(cleanedNote.toLowerCase()) ||
+            cleanedNote.toLowerCase().includes(exp.note.toLowerCase())
+          )))
     )
 
-    if (isDuplicate) duplicateCount++
+    // 2. Smart recurring match for EMI, Rent, and Bills
+    // In PennyWise, recurring expenses materialize as recurring_<scheduleId>_<month>
+    // Bank clearing dates for EMIs, rent, or utility bills often vary by +/- 4 days due to weekends/clearing cycles
+    if (!matchedExpense) {
+      matchedExpense = existingExpenses.find((exp) => {
+        const isRecurring = Boolean(exp.recurringId || (exp.id && String(exp.id).startsWith('recurring_')))
+        if (!isRecurring) return false
+
+        // Must be in the same year-month
+        if (!exp.date || exp.date.slice(0, 7) !== isoDate.slice(0, 7)) return false
+
+        // Exact amount match
+        if (Math.abs(exp.amount - amount) >= 0.01) return false
+
+        // Date difference within 4 days (covers weekend/holiday clearing delays)
+        const expTime = new Date(exp.date).getTime()
+        const curTime = new Date(isoDate).getTime()
+        const dayDiff = Math.abs(curTime - expTime) / (1000 * 3600 * 24)
+        if (dayDiff > 4) return false
+
+        // Category matches OR note contains recurring note keyword
+        const catMatches = exp.category?.toLowerCase() === category?.toLowerCase()
+        const noteMatches = Boolean(
+          exp.note && cleanedNote && (
+            exp.note.toLowerCase().includes(cleanedNote.toLowerCase()) ||
+            cleanedNote.toLowerCase().includes(exp.note.toLowerCase())
+          )
+        )
+
+        return catMatches || noteMatches
+      })
+    }
+
+    const isDuplicate = Boolean(matchedExpense)
+    const isRecurringMatch = Boolean(
+      matchedExpense && (matchedExpense.recurringId || String(matchedExpense.id).startsWith('recurring_'))
+    )
+
+    if (isDuplicate) {
+      duplicateCount++
+      if (isRecurringMatch) recurringCount++
+    }
 
     candidates.push({
       id: createId(),
@@ -394,7 +439,10 @@ export function parseBankStatementRows(rows, options = {}) {
       category,
       accountId: defaultAccountId,
       isDuplicate,
-      selected: !isDuplicate, // Unchecked by default if duplicate
+      isRecurringMatch,
+      matchedExpenseId: matchedExpense?.id || null,
+      matchedNote: matchedExpense?.note || null,
+      selected: !isDuplicate, // Unchecked by default if duplicate or recurring match
     })
   }
 
@@ -410,6 +458,7 @@ export function parseBankStatementRows(rows, options = {}) {
     transactions: candidates,
     totalParsed: candidates.length,
     duplicateCount,
+    recurringCount,
   }
 }
 

@@ -444,7 +444,12 @@ export default function App() {
           categories={data.categories}
           accounts={data.accounts || []}
           existingExpenses={data.expenses}
-          onImportBatch={importBatchExpenses}
+          onImportBatch={(imported, replacedIds) => {
+            if (replacedIds?.length) {
+              deleteBatchExpenses(replacedIds)
+            }
+            importBatchExpenses(imported)
+          }}
           onDismiss={() => setStatementModal(false)}
         />
       ) : null}

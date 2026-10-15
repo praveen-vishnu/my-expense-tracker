@@ -2199,6 +2199,11 @@ h2 {
   color: #b45309;
 }
 
+.dup-badge.recurring-badge {
+  background: rgba(99, 102, 241, 0.15);
+  color: #4f46e5;
+}
+
 .table-select {
   padding: 0.35rem 0.55rem;
   border-radius: 8px;
@@ -2238,6 +2243,11 @@ h2 {
 :root[data-theme='dark'] .dup-badge {
   color: #fbbf24;
   background: rgba(245, 158, 11, 0.2);
+}
+
+:root[data-theme='dark'] .dup-badge.recurring-badge {
+  color: #a5b4fc;
+  background: rgba(99, 102, 241, 0.25);
 }
 
 :root[data-theme='dark'] .import-table-container {

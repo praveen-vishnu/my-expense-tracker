@@ -98,3 +98,60 @@ test('parseBankStatementRows parses 2D arrays extracted from Excel sheets (.xls,
   assert.equal(result.transactions[1].category, 'Bills')
   assert.equal(result.transactions[1].date, '2026-09-16')
 })
+
+test('parseBankStatementCSV correctly identifies and matches recurring EMI, Rent, and Bills', () => {
+  const statementCSV = `
+Date,Narration,Withdrawal,Deposit
+05/10/2026,UPI-RENT-PAYMENT-FOR-OCT,25000.00,
+07/10/2026,ACH D- BAJAJ FINANCE LOAN EMI,12450.00,
+08/10/2026,SWIGGY BANGALORE,350.00,
+`
+
+  const existingExpenses = [
+    // Pre-generated recurring rent (due on the 1st, paid on the 5th)
+    {
+      id: 'recurring_rent_2026-10',
+      recurringId: 'sched_rent',
+      date: '2026-10-01',
+      amount: 25000,
+      note: 'Home Rent',
+      category: 'Rent',
+    },
+    // Pre-generated recurring EMI (due on the 5th, auto-debited on the 7th)
+    {
+      id: 'recurring_emi_2026-10',
+      recurringId: 'sched_emi',
+      date: '2026-10-05',
+      amount: 12450,
+      note: 'Bajaj Finance EMI',
+      category: 'EMI',
+    },
+  ]
+
+  const result = parseBankStatementCSV(statementCSV, {
+    availableCategories: ['Rent', 'EMI', 'Food'],
+    existingExpenses,
+  })
+
+  assert.equal(result.ok, true)
+  assert.equal(result.totalParsed, 3)
+  assert.equal(result.duplicateCount, 2)
+  assert.equal(result.recurringCount, 2)
+
+  // 1. Rent transaction matches recurring rent
+  assert.equal(result.transactions[0].isRecurringMatch, true)
+  assert.equal(result.transactions[0].isDuplicate, true)
+  assert.equal(result.transactions[0].selected, false) // unselected by default
+  assert.equal(result.transactions[0].matchedExpenseId, 'recurring_rent_2026-10')
+
+  // 2. EMI transaction matches recurring EMI
+  assert.equal(result.transactions[1].isRecurringMatch, true)
+  assert.equal(result.transactions[1].isDuplicate, true)
+  assert.equal(result.transactions[1].selected, false)
+  assert.equal(result.transactions[1].matchedExpenseId, 'recurring_emi_2026-10')
+
+  // 3. Swiggy transaction is regular new expense
+  assert.equal(result.transactions[2].isRecurringMatch, false)
+  assert.equal(result.transactions[2].isDuplicate, false)
+  assert.equal(result.transactions[2].selected, true)
+})
