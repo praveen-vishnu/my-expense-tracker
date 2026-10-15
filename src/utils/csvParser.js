@@ -5,17 +5,18 @@ import { createId, isValidDate, pad2 } from './formatting.js'
  * Handles: HDFC, SBI, ICICI, Axis, Kotak, and Standard/Generic CSV formats.
  */
 
-// Keyword-to-category mapping for smart auto-categorization
+// General keyword-to-category mapping for smart auto-categorization
 const CATEGORY_RULES = [
   {
     category: 'Rent',
-    keywords: ['rent', 'owner', 'maintenance', 'chelladurai', 'house rent']
+    keywords: ['rent', 'house rent', 'flat rent', 'room rent']
   },
   {
     category: 'EMI',
     keywords: [
       'emi', 'loan', 'bajaj', 'tatacapital', 'tata capital', 'incred', 'eduvanz',
-      'chola', 'muthoot', 'home loan', 'car loan', 'personal loan', 'clearing corp', 'pln024901'
+      'chola', 'muthoot', 'home loan', 'car loan', 'personal loan', 'clearing corp',
+      'retail asset', 'financial ser', 'hdb finance', 'idfc first loan', 'dmi finance'
     ]
   },
   {
@@ -115,19 +116,34 @@ export function cleanNarration(raw) {
 }
 
 /**
- * Predict category using keywords in description.
+ * Predict category using keywords and banking pattern regexes.
  */
 export function predictCategory(description, availableCategories = []) {
   const lower = description.toLowerCase()
+
+  // 1. Generic banking pattern matching:
+  // - Loan account numbers like PLN12345, HML123, AUTOLOAN, etc.
+  if (/\b(pln\d+|hl\d+|bl\d+|al\d+|loan|emi)\b/i.test(lower)) {
+    const emiCat = availableCategories.find((c) => c.toLowerCase() === 'emi')
+    if (emiCat) return emiCat
+  }
+
+  // - Rent remarks like "SEPT RENT", "RENT FOR OCT", etc.
+  if (/\b(rent|house\s*rent|room\s*rent)\b/i.test(lower)) {
+    const rentCat = availableCategories.find((c) => c.toLowerCase() === 'rent')
+    if (rentCat) return rentCat
+  }
+
+  // 2. Standard keyword matching
   for (const rule of CATEGORY_RULES) {
     if (rule.keywords.some((k) => lower.includes(k))) {
-      // Return matching category if available or as default
       const matched = availableCategories.find(
         (c) => c.toLowerCase() === rule.category.toLowerCase()
       )
       return matched || rule.category
     }
   }
+
   return availableCategories[0] || 'Other'
 }
 
