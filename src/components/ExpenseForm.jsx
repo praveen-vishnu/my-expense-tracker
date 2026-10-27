@@ -8,6 +8,7 @@ export default function ExpenseForm({
   categories,
   accounts = [],
   initial,
+  recurringSchedule = null,
   onSave,
   onCancel,
 }) {
@@ -25,6 +26,7 @@ export default function ExpenseForm({
   const [note, setNote] = useState(initial?.note || '')
   const [suggestedCategory, setSuggestedCategory] = useState(null)
   const [accountId, setAccountId] = useState(initial?.accountId || defaultAccId)
+  const [updateScheduleToo, setUpdateScheduleToo] = useState(false)
 
   // Split expense states
   const [isSplit, setIsSplit] = useState(Boolean(initial?.split))
@@ -123,23 +125,26 @@ export default function ExpenseForm({
     }
 
     setError(null)
-    onSave({
-      amount: value,
-      category,
-      date,
-      note: note.trim(),
-      accountId: accountId || null,
-      split: isSplit
-        ? {
-            myShare: parseAmount(myShare) || 0,
-            owedAmount: calculatedOwed,
-            owedBy: owedBy.trim() || 'Friend',
-            settled: initial?.split?.settled || false,
-            settledDate: initial?.split?.settledDate || null,
-            settledAccountId: initial?.split?.settledAccountId || null,
-          }
-        : null,
-    })
+    onSave(
+      {
+        amount: value,
+        category,
+        date,
+        note: note.trim(),
+        accountId: accountId || null,
+        split: isSplit
+          ? {
+              myShare: parseAmount(myShare) || 0,
+              owedAmount: calculatedOwed,
+              owedBy: owedBy.trim() || 'Friend',
+              settled: initial?.split?.settled || false,
+              settledDate: initial?.split?.settledDate || null,
+              settledAccountId: initial?.split?.settledAccountId || null,
+            }
+          : null,
+      },
+      updateScheduleToo
+    )
   }
 
   const isEdit = Boolean(initial)
@@ -328,6 +333,19 @@ export default function ExpenseForm({
             </div>
           ) : null}
         </div>
+
+        {recurringSchedule ? (
+          <div className="recurring-edit-notice">
+            <label>
+              <input
+                type="checkbox"
+                checked={updateScheduleToo}
+                onChange={(e) => setUpdateScheduleToo(e.target.checked)}
+              />
+              <span>Also update recurring schedule ({recurringSchedule.name}) for future months</span>
+            </label>
+          </div>
+        ) : null}
 
         {error ? <p id="expense-form-error" className="form-error" role="alert">{error.message}</p> : null}
 

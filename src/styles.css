@@ -1506,6 +1506,73 @@ h2 {
   padding-inline: 1.2rem;
 }
 
+.editing-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.9rem;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: #4f46e5;
+  margin-bottom: 0.5rem;
+}
+
+.editing-banner .text-btn {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+  color: inherit;
+}
+
+.recurring-form-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  justify-self: stretch;
+}
+
+.recurring-form-actions .btn {
+  flex: 1;
+}
+
+.schedule-list li.schedule-item-editing {
+  background: rgba(99, 102, 241, 0.06);
+  border-radius: 8px;
+  padding: 0.7rem 0.6rem;
+  border-top-color: transparent;
+  outline: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.recurring-edit-notice {
+  margin-top: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 8px;
+}
+
+.recurring-edit-notice label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.86rem;
+  font-weight: 500;
+  color: #4f46e5;
+  cursor: pointer;
+}
+
+.recurring-edit-notice input[type="checkbox"] {
+  width: 1.05rem;
+  height: 1.05rem;
+  accent-color: #4f46e5;
+  cursor: pointer;
+}
+
 .schedule-list {
   display: grid;
   gap: 0.7rem;
@@ -1694,7 +1761,8 @@ h2 {
     grid-column: 1 / -1;
   }
 
-  .recurring-form .btn {
+  .recurring-form .btn,
+  .recurring-form-actions {
     grid-column: 1 / -1;
   }
 
@@ -4505,4 +4573,24 @@ h2 {
 :root[data-theme='dark'] .cycle-spend-card {
   background: rgba(130, 201, 174, 0.06);
   border-color: rgba(130, 201, 174, 0.15);
+}
+
+:root[data-theme='dark'] .editing-banner {
+  background: rgba(99, 102, 241, 0.16);
+  border-color: rgba(99, 102, 241, 0.4);
+  color: #a5b4fc;
+}
+
+:root[data-theme='dark'] .schedule-list li.schedule-item-editing {
+  background: rgba(99, 102, 241, 0.12);
+  outline-color: rgba(99, 102, 241, 0.45);
+}
+
+:root[data-theme='dark'] .recurring-edit-notice {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: rgba(99, 102, 241, 0.35);
+}
+
+:root[data-theme='dark'] .recurring-edit-notice label {
+  color: #a5b4fc;
 }

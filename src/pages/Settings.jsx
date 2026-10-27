@@ -16,6 +16,7 @@ export default function Settings({
   onSaveBudget,
   onOpenCategoryBudgets,
   onAddRecurring,
+  onUpdateRecurring,
   onDeleteRecurring,
   onAddAccount,
   onDeleteAccount,
@@ -26,11 +27,13 @@ export default function Settings({
   const categoryInputRef = useRef(null)
   const accountInputRef = useRef(null)
   const scheduleFields = useRef({})
+  const scheduleFormRef = useRef(null)
 
   const [categoryName, setCategoryName] = useState('')
   const [feedback, setFeedback] = useState({ section: '', error: '', message: '', field: '' })
   const [budgetInput, setBudgetInput] = useState(budget ? String(budget) : '')
 
+  const [editingScheduleId, setEditingScheduleId] = useState(null)
   const [scheduleName, setScheduleName] = useState('')
   const [scheduleAmount, setScheduleAmount] = useState('')
   const [scheduleCategory, setScheduleCategory] = useState(data.categories[0] || '')
@@ -175,6 +178,34 @@ export default function Settings({
     reportMessage('gemini', geminiKey.trim() ? 'Gemini API Key saved.' : 'Gemini API Key cleared.')
   }
 
+  function handleStartEditRecurring(schedule) {
+    setEditingScheduleId(schedule.id)
+    setScheduleName(schedule.name || '')
+    setScheduleAmount(String(schedule.amount || ''))
+    setScheduleCategory(schedule.category || data.categories[0] || '')
+    setScheduleDay(String(schedule.day || '1'))
+    setScheduleKind(schedule.kind || 'monthly')
+    setScheduleInstallments(schedule.installments ? String(schedule.installments) : '')
+    setScheduleAccountId(schedule.accountId || '')
+    setFeedback({ section: '', error: '', message: '', field: '' })
+    scheduleFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setTimeout(() => {
+      scheduleFields.current.name?.focus()
+    }, 100)
+  }
+
+  function handleCancelEditRecurring() {
+    setEditingScheduleId(null)
+    setScheduleName('')
+    setScheduleAmount('')
+    setScheduleCategory(data.categories[0] || '')
+    setScheduleDay('1')
+    setScheduleKind('monthly')
+    setScheduleInstallments('')
+    setScheduleAccountId(data.accounts?.find((a) => a.isDefault)?.id || '')
+    setFeedback({ section: '', error: '', message: '', field: '' })
+  }
+
   function handleRecurringSubmit(event) {
     event.preventDefault()
     const amount = parseAmount(scheduleAmount)
@@ -200,22 +231,43 @@ export default function Settings({
       reportError('schedule', 'Enter the number of EMI installments.', 'installments')
       return
     }
-    onAddRecurring({
-      id: createId(),
-      name: scheduleName.trim(),
-      amount,
-      category: scheduleCategory,
-      note: scheduleName.trim(),
-      day,
-      startMonth: month,
-      kind: scheduleKind,
-      installments: scheduleKind === 'emi' ? installments : null,
-      accountId: scheduleAccountId || null,
-    })
-    setScheduleName('')
-    setScheduleAmount('')
-    setScheduleInstallments('')
-    reportMessage('schedule', 'Recurring schedule added.')
+
+    if (editingScheduleId) {
+      const existing = (data.recurringExpenses || []).find((s) => s.id === editingScheduleId)
+      if (onUpdateRecurring) {
+        onUpdateRecurring({
+          id: editingScheduleId,
+          name: scheduleName.trim(),
+          amount,
+          category: scheduleCategory,
+          note: scheduleName.trim(),
+          day,
+          startMonth: existing?.startMonth || month,
+          kind: scheduleKind,
+          installments: scheduleKind === 'emi' ? installments : null,
+          accountId: scheduleAccountId || null,
+        })
+      }
+      handleCancelEditRecurring()
+      reportMessage('schedule', 'Recurring schedule updated.')
+    } else {
+      onAddRecurring({
+        id: createId(),
+        name: scheduleName.trim(),
+        amount,
+        category: scheduleCategory,
+        note: scheduleName.trim(),
+        day,
+        startMonth: month,
+        kind: scheduleKind,
+        installments: scheduleKind === 'emi' ? installments : null,
+        accountId: scheduleAccountId || null,
+      })
+      setScheduleName('')
+      setScheduleAmount('')
+      setScheduleInstallments('')
+      reportMessage('schedule', 'Recurring schedule added.')
+    }
   }
 
   return (
@@ -407,7 +459,17 @@ export default function Settings({
           <h2>Recurring expenses & EMIs</h2>
           <p className="muted">Automatically add monthly bills or EMIs and deduct from accounts in {formatMonthLabel(month)}.</p>
         </div>
-        <form className="recurring-form" noValidate onSubmit={handleRecurringSubmit}>
+        {editingScheduleId ? (
+          <div className="editing-banner">
+            <span>
+              Editing recurring schedule: <strong>{scheduleName || 'Selected schedule'}</strong>
+            </span>
+            <button type="button" className="text-btn" onClick={handleCancelEditRecurring}>
+              Cancel editing
+            </button>
+          </div>
+        ) : null}
+        <form ref={scheduleFormRef} className="recurring-form" noValidate onSubmit={handleRecurringSubmit}>
           <label className="field">
             <span>Name</span>
             <input ref={(element) => { scheduleFields.current.name = element }} value={scheduleName} required aria-invalid={feedback.section === 'schedule' && feedback.field === 'name'} aria-describedby={feedback.section === 'schedule' && feedback.field === 'name' ? 'schedule-error' : undefined} onChange={(event) => setScheduleName(event.target.value)} placeholder="Home loan EMI" />
@@ -454,7 +516,16 @@ export default function Settings({
               <input ref={(element) => { scheduleFields.current.installments = element }} type="number" min="1" value={scheduleInstallments} required aria-invalid={feedback.section === 'schedule' && feedback.field === 'installments'} aria-describedby={feedback.section === 'schedule' && feedback.field === 'installments' ? 'schedule-error' : undefined} onChange={(event) => setScheduleInstallments(event.target.value)} placeholder="24" />
             </label>
           ) : null}
-          <button type="submit" className="btn btn-secondary">Add schedule</button>
+          <div className="recurring-form-actions">
+            <button type="submit" className="btn btn-secondary">
+              {editingScheduleId ? 'Save changes' : 'Add schedule'}
+            </button>
+            {editingScheduleId ? (
+              <button type="button" className="btn btn-ghost" onClick={handleCancelEditRecurring}>
+                Cancel
+              </button>
+            ) : null}
+          </div>
         </form>
         {feedback.section === 'schedule' && feedback.error ? <p id="schedule-error" className="form-error" role="alert">{feedback.error}</p> : null}
         {feedback.section === 'schedule' && feedback.message ? <p className="form-ok" role="status" aria-live="polite">{feedback.message}</p> : null}
@@ -462,8 +533,9 @@ export default function Settings({
           <ul className="schedule-list">
             {data.recurringExpenses.map((schedule) => {
               const account = data.accounts?.find((a) => a.id === schedule.accountId)
+              const isEditing = editingScheduleId === schedule.id
               return (
-                <li key={schedule.id}>
+                <li key={schedule.id} className={isEditing ? 'schedule-item-editing' : ''}>
                   <span>
                     <strong>{schedule.name}</strong>
                     <small>
@@ -473,7 +545,25 @@ export default function Settings({
                   </span>
                   <span className="schedule-actions">
                     <strong className="money">{formatINR(schedule.amount)}</strong>
-                    <button type="button" className="text-btn danger" aria-label={`Remove recurring schedule: ${schedule.name}`} onClick={() => onDeleteRecurring(schedule)}>Remove</button>
+                    <button
+                      type="button"
+                      className="text-btn"
+                      aria-label={`Edit recurring schedule: ${schedule.name}`}
+                      onClick={() => handleStartEditRecurring(schedule)}
+                    >
+                      {isEditing ? 'Editing…' : 'Edit'}
+                    </button>
+                    <button
+                      type="button"
+                      className="text-btn danger"
+                      aria-label={`Remove recurring schedule: ${schedule.name}`}
+                      onClick={() => {
+                        if (editingScheduleId === schedule.id) handleCancelEditRecurring()
+                        onDeleteRecurring(schedule)
+                      }}
+                    >
+                      Remove
+                    </button>
                   </span>
                 </li>
               )
@@ -510,7 +600,7 @@ export default function Settings({
         {feedback.section === 'category' && feedback.message ? <p className="form-ok" role="status" aria-live="polite">{feedback.message}</p> : null}
       </section>
 
-      <section className="panel stack">
+      {/* <section className="panel stack">
         <div>
           <h2>AI Receipt & Bill Scanner</h2>
           <p className="muted">Configure Google Gemini 1.5 Flash API key for instant camera/screenshot parsing.</p>
@@ -535,7 +625,7 @@ export default function Settings({
         {feedback.section === 'gemini' && feedback.message ? (
           <p className="form-ok" role="status" aria-live="polite">{feedback.message}</p>
         ) : null}
-      </section>
+      </section> */}
 
       <section className="panel stack">
         <h2>Data</h2>

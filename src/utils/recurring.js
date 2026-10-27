@@ -37,3 +37,33 @@ export function addRecurringExpenses(data, month) {
     ? { ...data, expenses: [...additions, ...data.expenses] }
     : data
 }
+
+export function syncRecurringExpenseToExpenses(expenses = [], schedule, month) {
+  if (!schedule || !month) return { expenses, updatedExpenses: [] }
+
+  const currentMonthExpId = `recurring_${schedule.id}_${month}`
+  const day = Math.min(schedule.day, daysInMonth(month))
+  const targetDate = `${month}-${pad2(day)}`
+  const updatedExpenses = []
+
+  const nextExpenses = expenses.map((exp) => {
+    if (exp.id === currentMonthExpId || (exp.recurringId === schedule.id && exp.date?.startsWith(month))) {
+      const updated = {
+        ...exp,
+        amount: schedule.amount,
+        category: schedule.category,
+        note: schedule.note || schedule.name,
+        date: targetDate,
+        accountId: schedule.accountId || null,
+      }
+      updatedExpenses.push(updated)
+      return updated
+    }
+    return exp
+  })
+
+  return {
+    expenses: nextExpenses,
+    updatedExpenses,
+  }
+}

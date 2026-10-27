@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { emptyData, loadData, saveData, normalizeData, saveLocalData } from '../utils/storage.js'
-import { addRecurringExpenses } from '../utils/recurring.js'
+import { addRecurringExpenses, syncRecurringExpenseToExpenses } from '../utils/recurring.js'
 import { createId, isValidDate, todayISO } from '../utils/formatting.js'
 import { normalizeNarration } from '../utils/reconcile.js'
 import { isSupabaseConfigured, supabase } from '../utils/supabase.js'
@@ -462,10 +462,50 @@ export function useTrackerData(authReady, authUser, month) {
       op: 'upsert',
       payload: schedule,
     })
-    setData((current) => ({
-      ...current,
-      recurringExpenses: [...current.recurringExpenses, schedule],
-    }))
+    setData((current) => {
+      const withSchedule = {
+        ...current,
+        recurringExpenses: [...(current.recurringExpenses || []), schedule],
+      }
+      return addRecurringExpenses(withSchedule, monthRef.current)
+    })
+  }, [])
+
+  const updateRecurringExpense = useCallback((schedule) => {
+    if (!schedule || !schedule.id) return
+    enqueueMutation({
+      table: 'recurring_schedules',
+      id: schedule.id,
+      op: 'upsert',
+      payload: schedule,
+    })
+    setData((current) => {
+      const nextSchedules = (current.recurringExpenses || []).map((item) =>
+        item.id === schedule.id ? schedule : item
+      )
+
+      const currentMonthKey = monthRef.current
+      const { expenses: nextExpenses, updatedExpenses } = syncRecurringExpenseToExpenses(
+        current.expenses,
+        schedule,
+        currentMonthKey
+      )
+
+      for (const updatedExp of updatedExpenses) {
+        enqueueMutation({
+          table: 'expenses',
+          id: updatedExp.id,
+          op: 'upsert',
+          payload: updatedExp,
+        })
+      }
+
+      return {
+        ...current,
+        recurringExpenses: nextSchedules,
+        expenses: nextExpenses,
+      }
+    })
   }, [])
 
   const deleteRecurringExpense = useCallback((scheduleId) => {
@@ -720,6 +760,7 @@ export function useTrackerData(authReady, authUser, month) {
     deleteCategoryBudget,
     copyCategoryBudgets,
     addRecurringExpense,
+    updateRecurringExpense,
     deleteRecurringExpense,
     addCategory,
     addAccount,

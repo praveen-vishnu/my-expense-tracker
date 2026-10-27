@@ -64,6 +64,7 @@ export default function App() {
     saveCategoryBudget,
     copyCategoryBudgets,
     addRecurringExpense,
+    updateRecurringExpense,
     deleteRecurringExpense,
     addCategory,
     addAccount,
@@ -162,13 +163,36 @@ export default function App() {
     })
   }, [clearAllData])
 
-  const handleSaveExpense = useCallback((fields) => {
-    upsertExpense(fields, expenseForm?.expense?.id)
+  const handleSaveExpense = useCallback((fields, updateScheduleToo) => {
+    const existingId = expenseForm?.expense?.id
+    upsertExpense(fields, existingId)
+
+    if (updateScheduleToo && existingId) {
+      const schedule = (data.recurringExpenses || []).find(
+        (r) =>
+          r.id === expenseForm.expense.recurringId ||
+          existingId === `recurring_${r.id}_${month}` ||
+          existingId.startsWith(`recurring_${r.id}_`)
+      )
+      if (schedule && updateRecurringExpense) {
+        const day = Number(fields.date?.split('-')?.[2]) || schedule.day
+        updateRecurringExpense({
+          ...schedule,
+          name: fields.note || schedule.name,
+          amount: fields.amount,
+          category: fields.category,
+          note: fields.note || schedule.note,
+          day,
+          accountId: fields.accountId || null,
+        })
+      }
+    }
+
     setExpenseForm(null)
     if (!expenseForm?.expense) {
       setPage('dashboard')
     }
-  }, [expenseForm, upsertExpense])
+  }, [expenseForm, upsertExpense, data.recurringExpenses, month, updateRecurringExpense])
 
   const handleSaveIncome = useCallback((amount, accountId) => {
     saveIncome(month, amount, accountId)
@@ -262,7 +286,7 @@ export default function App() {
         <MonthSelector month={month} onChange={setMonth} />
         <div className="topbar-actions">
           <ThemeToggle theme={theme} onToggle={toggleTheme} />
-          <button
+          {/* <button
             type="button"
             className="btn btn-secondary topbar-btn"
             onClick={() => setScanReceiptModal(true)}
@@ -271,7 +295,7 @@ export default function App() {
           >
             <IconCamera size={16} />
             <span className="btn-label-desktop">Scan</span>
-          </button>
+          </button> */}
           <button
             type="button"
             className="btn btn-secondary topbar-btn"
@@ -364,6 +388,7 @@ export default function App() {
             onClear={handlePromptClearAll}
             onAddCategory={addCategory}
             onAddRecurring={addRecurringExpense}
+            onUpdateRecurring={updateRecurringExpense}
             onDeleteRecurring={handlePromptDeleteRecurring}
             onAddAccount={addAccount}
             onDeleteAccount={handlePromptDeleteAccount}
@@ -386,6 +411,16 @@ export default function App() {
           }
           accounts={data.accounts || []}
           initial={expenseForm.expense}
+          recurringSchedule={
+            expenseForm.expense
+              ? (data.recurringExpenses || []).find(
+                  (r) =>
+                    r.id === expenseForm.expense.recurringId ||
+                    expenseForm.expense.id === `recurring_${r.id}_${month}` ||
+                    expenseForm.expense.id.startsWith(`recurring_${r.id}_`)
+                ) || null
+              : null
+          }
           onCancel={() => setExpenseForm(null)}
           onSave={handleSaveExpense}
         />

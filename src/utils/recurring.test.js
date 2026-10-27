@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { addRecurringExpenses } from './recurring.js'
+import { addRecurringExpenses, syncRecurringExpenseToExpenses } from './recurring.js'
 
 test('addRecurringExpenses generates monthly and EMI expenses with deterministic IDs', () => {
   const data = {
@@ -94,5 +94,45 @@ test('addRecurringExpenses is idempotent and does not duplicate existing generat
 
   const updated = addRecurringExpenses(data, '2026-10')
   assert.equal(updated.expenses.length, 1)
+})
+
+test('syncRecurringExpenseToExpenses updates matching materialized expenses for the month', () => {
+  const expenses = [
+    {
+      id: 'recurring_rec_sip_2026-10',
+      recurringId: 'rec_sip',
+      amount: 5000,
+      category: 'Investments',
+      note: 'SIP',
+      date: '2026-10-01',
+      accountId: 'acc_old',
+    },
+    {
+      id: 'exp_other',
+      amount: 250,
+      category: 'Food',
+      date: '2026-10-02',
+    },
+  ]
+
+  const updatedSchedule = {
+    id: 'rec_sip',
+    name: 'Nippon India SIP',
+    amount: 6050,
+    category: 'Investments',
+    note: 'Nippon India SIP',
+    day: 5,
+    accountId: 'acc_new',
+  }
+
+  const result = syncRecurringExpenseToExpenses(expenses, updatedSchedule, '2026-10')
+  assert.equal(result.updatedExpenses.length, 1)
+  assert.equal(result.updatedExpenses[0].amount, 6050)
+  assert.equal(result.updatedExpenses[0].note, 'Nippon India SIP')
+  assert.equal(result.updatedExpenses[0].date, '2026-10-05')
+  assert.equal(result.updatedExpenses[0].accountId, 'acc_new')
+
+  const unchanged = result.expenses.find((e) => e.id === 'exp_other')
+  assert.equal(unchanged.amount, 250)
 })
 
