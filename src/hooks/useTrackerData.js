@@ -268,19 +268,34 @@ export function useTrackerData(authReady, authUser, month) {
   }, [])
 
   const saveIncome = useCallback((monthKey, amount, accountId = null) => {
-    enqueueMutation({
-      table: 'incomes',
-      id: monthKey,
-      op: 'upsert',
-      payload: { month: monthKey, amount, accountId },
-    })
+    const val = Number(amount)
+    if (Number.isFinite(val) && val > 0) {
+      enqueueMutation({
+        table: 'incomes',
+        id: monthKey,
+        op: 'upsert',
+        payload: { month: monthKey, amount: val, accountId },
+      })
+    } else {
+      enqueueMutation({
+        table: 'incomes',
+        id: monthKey,
+        op: 'delete',
+      })
+    }
 
     setData((current) => {
-      const nextIncome = { ...current.income, [monthKey]: amount }
+      const nextIncome = { ...current.income }
       const nextIncomeAccounts = { ...(current.incomeAccounts || {}) }
-      if (accountId) {
-        nextIncomeAccounts[monthKey] = accountId
+      if (Number.isFinite(val) && val > 0) {
+        nextIncome[monthKey] = val
+        if (accountId) {
+          nextIncomeAccounts[monthKey] = accountId
+        } else {
+          delete nextIncomeAccounts[monthKey]
+        }
       } else {
+        delete nextIncome[monthKey]
         delete nextIncomeAccounts[monthKey]
       }
       return {
@@ -368,17 +383,34 @@ export function useTrackerData(authReady, authUser, month) {
   }, [])
 
   const saveBudget = useCallback((monthKey, amount) => {
-    enqueueMutation({
-      table: 'budgets',
-      id: monthKey,
-      op: 'upsert',
-      payload: { month: monthKey, amount },
-    })
+    const val = Number(amount)
+    if (Number.isFinite(val) && val > 0) {
+      enqueueMutation({
+        table: 'budgets',
+        id: monthKey,
+        op: 'upsert',
+        payload: { month: monthKey, amount: val },
+      })
+    } else {
+      enqueueMutation({
+        table: 'budgets',
+        id: monthKey,
+        op: 'delete',
+      })
+    }
 
-    setData((current) => ({
-      ...current,
-      budgets: { ...current.budgets, [monthKey]: amount },
-    }))
+    setData((current) => {
+      const nextBudgets = { ...(current.budgets || {}) }
+      if (Number.isFinite(val) && val > 0) {
+        nextBudgets[monthKey] = val
+      } else {
+        delete nextBudgets[monthKey]
+      }
+      return {
+        ...current,
+        budgets: nextBudgets,
+      }
+    })
   }, [])
 
   const saveCategoryBudget = useCallback((monthKey, categoryName, amount) => {

@@ -88,6 +88,15 @@ export async function pushOutbox(supabase, userId) {
         if (m.op === 'delete' || !m.payload || (!m.payload.name && m.table === 'accounts')) {
           deletes.push(m)
         } else if (m.op === 'upsert' && m.payload) {
+          // Self-heal: If incomes, budgets or category_budgets has amount <= 0, route to soft-delete
+          // instead of upserting, preventing PostgreSQL 23514 check_violation (incomes_amount_check)
+          if (
+            (m.table === 'incomes' || m.table === 'budgets' || m.table === 'category_budgets') &&
+            Number(m.payload.amount) <= 0
+          ) {
+            deletes.push({ ...m, op: 'delete' })
+            continue
+          }
           const row = config.toRow(m.payload, userId)
           row.deleted_at = null
           upserts.push({ outboxId: m.outboxId, row })
@@ -100,6 +109,18 @@ export async function pushOutbox(supabase, userId) {
         let { error } = await supabase
           .from(table)
           .upsert(rows, { onConflict: config.primaryKey })
+
+        // Self-healing for check constraint violation (e.g. incomes_amount_check / budgets_amount_check)
+        if (error && (error.code === '23514' || error.message?.includes('check constraint') || error.message?.includes('_amount_check'))) {
+          console.warn(`Check constraint violation on ${table}. Filtering invalid <= 0 rows...`, error)
+          const validRows = rows.filter((r) => r.amount == null || Number(r.amount) > 0)
+          if (validRows.length > 0) {
+            const retryRes = await supabase.from(table).upsert(validRows, { onConflict: config.primaryKey })
+            error = retryRes.error
+          } else {
+            error = null
+          }
+        }
 
         // Self-healing for foreign key violation: if an expense, income or recurring references an account that was deleted or missing remotely,
         // retry the upsert with account_id = null rather than permanently blocking the outbox.
@@ -349,13 +370,15 @@ export async function backfillNormalizedTables(supabase, userId, currentData) {
 
     // 5. Incomes
     if (currentData.income && typeof currentData.income === 'object') {
-      const rows = Object.entries(currentData.income).map(([month, amount]) =>
-        TABLE_CONFIGS.incomes.toRow({
-          month,
-          amount,
-          accountId: currentData.incomeAccounts?.[month] || null,
-        }, userId)
-      )
+      const rows = Object.entries(currentData.income)
+        .filter(([_, amount]) => Number(amount) > 0)
+        .map(([month, amount]) =>
+          TABLE_CONFIGS.incomes.toRow({
+            month,
+            amount: Number(amount),
+            accountId: currentData.incomeAccounts?.[month] || null,
+          }, userId)
+        )
       if (rows.length) {
         await supabase.from('incomes').upsert(rows, { onConflict: 'user_id,month' })
       }
@@ -363,9 +386,11 @@ export async function backfillNormalizedTables(supabase, userId, currentData) {
 
     // 6. Budgets
     if (currentData.budgets && typeof currentData.budgets === 'object') {
-      const rows = Object.entries(currentData.budgets).map(([month, amount]) =>
-        TABLE_CONFIGS.budgets.toRow({ month, amount }, userId)
-      )
+      const rows = Object.entries(currentData.budgets)
+        .filter(([_, amount]) => Number(amount) > 0)
+        .map(([month, amount]) =>
+          TABLE_CONFIGS.budgets.toRow({ month, amount: Number(amount) }, userId)
+        )
       if (rows.length) {
         await supabase.from('budgets').upsert(rows, { onConflict: 'user_id,month' })
       }
