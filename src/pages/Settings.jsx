@@ -41,6 +41,7 @@ export default function Settings({
   const [scheduleKind, setScheduleKind] = useState('monthly')
   const [scheduleInstallments, setScheduleInstallments] = useState('')
   const [scheduleAccountId, setScheduleAccountId] = useState(() => data.accounts?.find((a) => a.isDefault)?.id || '')
+  const [scheduleDebtId, setScheduleDebtId] = useState('')
 
   // Account form state
   const [accName, setAccName] = useState('')
@@ -187,6 +188,7 @@ export default function Settings({
     setScheduleKind(schedule.kind || 'monthly')
     setScheduleInstallments(schedule.installments ? String(schedule.installments) : '')
     setScheduleAccountId(schedule.accountId || '')
+    setScheduleDebtId(schedule.debtId || '')
     setFeedback({ section: '', error: '', message: '', field: '' })
     scheduleFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     setTimeout(() => {
@@ -203,6 +205,7 @@ export default function Settings({
     setScheduleKind('monthly')
     setScheduleInstallments('')
     setScheduleAccountId(data.accounts?.find((a) => a.isDefault)?.id || '')
+    setScheduleDebtId('')
     setFeedback({ section: '', error: '', message: '', field: '' })
   }
 
@@ -231,6 +234,12 @@ export default function Settings({
       reportError('schedule', 'Enter the number of EMI installments.', 'installments')
       return
     }
+    if (scheduleKind === 'emi' && scheduleDebtId && (data.recurringExpenses || []).some((schedule) =>
+      schedule.id !== editingScheduleId && schedule.debtId === scheduleDebtId
+    )) {
+      reportError('schedule', 'That debt is already linked to another EMI schedule.', 'debt')
+      return
+    }
 
     if (editingScheduleId) {
       const existing = (data.recurringExpenses || []).find((s) => s.id === editingScheduleId)
@@ -246,6 +255,7 @@ export default function Settings({
           kind: scheduleKind,
           installments: scheduleKind === 'emi' ? installments : null,
           accountId: scheduleAccountId || null,
+          debtId: scheduleKind === 'emi' ? scheduleDebtId || null : null,
         })
       }
       handleCancelEditRecurring()
@@ -262,10 +272,12 @@ export default function Settings({
         kind: scheduleKind,
         installments: scheduleKind === 'emi' ? installments : null,
         accountId: scheduleAccountId || null,
+        debtId: scheduleKind === 'emi' ? scheduleDebtId || null : null,
       })
       setScheduleName('')
       setScheduleAmount('')
       setScheduleInstallments('')
+      setScheduleDebtId('')
       reportMessage('schedule', 'Recurring schedule added.')
     }
   }
@@ -457,7 +469,7 @@ export default function Settings({
       <section className="panel stack">
         <div>
           <h2>Recurring expenses & EMIs</h2>
-          <p className="muted">Automatically add monthly bills or EMIs and deduct from accounts in {formatMonthLabel(month)}.</p>
+          <p className="muted">Automatically add monthly bills or EMIs and deduct from accounts in {formatMonthLabel(month)}. Link an EMI to a debt to update its balance and payment history automatically when that month’s EMI is generated.</p>
         </div>
         {editingScheduleId ? (
           <div className="editing-banner">
@@ -511,10 +523,35 @@ export default function Settings({
             </select>
           </label>
           {scheduleKind === 'emi' ? (
-            <label className="field">
-              <span>Installments</span>
-              <input ref={(element) => { scheduleFields.current.installments = element }} type="number" min="1" value={scheduleInstallments} required aria-invalid={feedback.section === 'schedule' && feedback.field === 'installments'} aria-describedby={feedback.section === 'schedule' && feedback.field === 'installments' ? 'schedule-error' : undefined} onChange={(event) => setScheduleInstallments(event.target.value)} placeholder="24" />
-            </label>
+            <>
+              <label className="field">
+                <span>Installments</span>
+                <input ref={(element) => { scheduleFields.current.installments = element }} type="number" min="1" value={scheduleInstallments} required aria-invalid={feedback.section === 'schedule' && feedback.field === 'installments'} aria-describedby={feedback.section === 'schedule' && feedback.field === 'installments' ? 'schedule-error' : undefined} onChange={(event) => setScheduleInstallments(event.target.value)} placeholder="24" />
+              </label>
+              <label className="field linked-debt-field">
+                <span>Linked debt (optional)</span>
+                <select
+                  ref={(element) => { scheduleFields.current.debt = element }}
+                  value={scheduleDebtId}
+                  aria-invalid={feedback.section === 'schedule' && feedback.field === 'debt'}
+                  aria-describedby={feedback.section === 'schedule' && feedback.field === 'debt' ? 'schedule-error' : undefined}
+                  onChange={(event) => setScheduleDebtId(event.target.value)}
+                >
+                  <option value="">Do not link a debt</option>
+                  {(data.debts || [])
+                    .filter((debt) =>
+                      debt.status !== 'paid' &&
+                      debt.balance > 0 &&
+                      debt.kind !== 'credit_card' &&
+                      !(data.recurringExpenses || []).some((schedule) =>
+                        schedule.id !== editingScheduleId && schedule.debtId === debt.id
+                      )
+                    )
+                    .map((debt) => <option key={debt.id} value={debt.id}>{debt.name} · {formatINR(debt.balance)} remaining</option>)}
+                </select>
+                <small className="muted">Linked EMI expenses automatically reduce the debt. Interest is estimated from the debt’s saved rate.</small>
+              </label>
+            </>
           ) : null}
           <div className="recurring-form-actions">
             <button type="submit" className="btn btn-secondary">
@@ -533,6 +570,7 @@ export default function Settings({
           <ul className="schedule-list">
             {data.recurringExpenses.map((schedule) => {
               const account = data.accounts?.find((a) => a.id === schedule.accountId)
+              const linkedDebt = (data.debts || []).find((debt) => debt.id === schedule.debtId)
               const isEditing = editingScheduleId === schedule.id
               return (
                 <li key={schedule.id} className={isEditing ? 'schedule-item-editing' : ''}>
@@ -541,6 +579,7 @@ export default function Settings({
                     <small>
                       {schedule.kind === 'emi' ? `EMI · ${schedule.installments} installments` : 'Monthly'} · Day {schedule.day}
                       {account ? ` · Deducts from ${account.name}` : ''}
+                      {linkedDebt ? ` · Pays down ${linkedDebt.name}` : ''}
                     </small>
                   </span>
                   <span className="schedule-actions">
@@ -658,4 +697,3 @@ export default function Settings({
     </div>
   )
 }
-

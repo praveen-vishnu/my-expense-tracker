@@ -2,7 +2,7 @@
 
 ## 1. Create the table
 
-Open the Supabase project SQL Editor and run [`supabase/schema.sql`](supabase/schema.sql). Run the latest version again when the app adds a new table or policy; the script is safe to rerun.
+Open the Supabase project SQL Editor and run [`supabase/schema.sql`](supabase/schema.sql). For an existing installation, also run any newer feature migrations once, in order. The debt tracker uses [`supabase/migration_v6_debts.sql`](supabase/migration_v6_debts.sql), and linked recurring EMI schedules require [`supabase/migration_v7_emi_debt_link.sql`](supabase/migration_v7_emi_debt_link.sql). These scripts are safe to rerun.
 
 The app stores one JSON document per user in `expense_tracker_data`. Categories are stored separately in `expense_categories`, and starter categories are seeded by a database trigger when a new account is created. Row-level security allows a user to read and write only their own rows.
 

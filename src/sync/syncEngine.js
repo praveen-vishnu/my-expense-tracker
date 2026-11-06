@@ -65,8 +65,10 @@ export async function pushOutbox(supabase, userId) {
     // Push in dependency order so foreign keys (accounts) exist before expenses/transfers
     const tablePushOrder = [
       'accounts',
+      'debts',
       'expenses',
       'transfers',
+      'debt_payments',
       'recurring_schedules',
       'category_budgets',
       'incomes',
@@ -140,7 +142,7 @@ export async function pushOutbox(supabase, userId) {
 
         if (error) {
           if (error.code === 'PGRST205' || error.message?.includes('schema cache')) {
-            console.warn(`Table "${table}" not found in Supabase schema cache. Run migration_v4_sync.sql to create it.`)
+            console.warn(`Table "${table}" not found in Supabase schema cache. Run the required Supabase schema migrations.`)
             continue // Keep in outbox, continue with other tables
           }
           throw error
@@ -229,7 +231,7 @@ export async function deltaPull(supabase, userId, onRemoteChanges) {
 
         if (error) {
           if (error.code === 'PGRST205' || error.message?.includes('schema cache')) {
-            console.warn(`Table "${table}" not found in Supabase schema cache. Run migration_v4_sync.sql to create it.`)
+            console.warn(`Table "${table}" not found in Supabase schema cache. Run the required Supabase schema migrations.`)
             break
           }
           throw error
@@ -333,6 +335,17 @@ export async function backfillNormalizedTables(supabase, userId, currentData) {
       const rows = currentData.accounts.map((a) => TABLE_CONFIGS.accounts.toRow(a, userId))
       await supabase.from('accounts').upsert(rows, { onConflict: 'id' })
       rows.forEach((r) => validAccountIds.add(r.id))
+    }
+
+    // Debts must exist before their payment rows because debt_payments references debts.
+    if (Array.isArray(currentData.debts) && currentData.debts.length) {
+      const rows = currentData.debts.map((debt) => TABLE_CONFIGS.debts.toRow(debt, userId))
+      await supabase.from('debts').upsert(rows, { onConflict: 'id' })
+    }
+
+    if (Array.isArray(currentData.debtPayments) && currentData.debtPayments.length) {
+      const rows = currentData.debtPayments.map((payment) => TABLE_CONFIGS.debt_payments.toRow(payment, userId))
+      await supabase.from('debt_payments').upsert(rows, { onConflict: 'id' })
     }
 
     // 2. Expenses (sanitize orphaned account_id to null if account does not exist)
@@ -479,4 +492,3 @@ export function initAutoSync(getSupabase, getUserId, onRemoteChanges) {
     document.removeEventListener('visibilitychange', onVisibilityChange)
   }
 }
-

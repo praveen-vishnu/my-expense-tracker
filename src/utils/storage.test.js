@@ -103,6 +103,37 @@ test('normalizeData normalizes transfers, removing incomplete or zero-amount tra
   assert.equal(result.transfers[0].amount, 5000)
 })
 
+test('normalizeData preserves a linked debt on EMI schedules only', () => {
+  const result = normalizeData({
+    recurringExpenses: [
+      {
+        id: 'emi-linked',
+        name: 'Home EMI',
+        amount: 1000,
+        category: 'Housing',
+        day: 5,
+        startMonth: '2026-10',
+        kind: 'emi',
+        installments: 12,
+        debtId: 'loan-1',
+      },
+      {
+        id: 'monthly-linked',
+        name: 'Rent',
+        amount: 1500,
+        category: 'Housing',
+        day: 1,
+        startMonth: '2026-10',
+        kind: 'monthly',
+        debtId: 'loan-1',
+      },
+    ],
+  })
+
+  assert.equal(result.recurringExpenses[0].debtId, 'loan-1')
+  assert.equal(result.recurringExpenses[1].debtId, null)
+})
+
 test('normalizeData validates monthly maps for income, budgets, categoryBudgets, and incomeAccounts', () => {
   const result = normalizeData({
     income: { '2026-10': 75000, 'invalid-key': 5000 },
@@ -121,4 +152,3 @@ test('normalizeData validates monthly maps for income, budgets, categoryBudgets,
   assert.deepEqual(result.categoryBudgets, { '2026-10': { Food: 15000, Travel: 5000 } })
   assert.deepEqual(result.categories, ['Food', 'Travel', 'Shopping'])
 })
-

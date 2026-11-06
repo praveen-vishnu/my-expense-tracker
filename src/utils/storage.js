@@ -1,5 +1,6 @@
 import { isValidDate, isValidMonthKey } from './formatting.js'
 import { isSupabaseConfigured, supabase } from './supabase.js'
+import { normalizeDebt, normalizeDebtPayment } from './debts.js'
 
 export const STORAGE_KEY = 'expenseTracker'
 export const DATA_VERSION = 1
@@ -20,6 +21,8 @@ export function emptyData() {
     budgets: {},
     categoryBudgets: {},
     recurringExpenses: [],
+    debts: [],
+    debtPayments: [],
     expenses: [],
     accounts: defaultStarterAccounts(),
     transfers: [],
@@ -160,6 +163,7 @@ function normalizeRecurringExpenses(recurringExpenses) {
       kind: schedule.kind,
       installments: schedule.kind === 'emi' ? schedule.installments : null,
       accountId: typeof schedule.accountId === 'string' && schedule.accountId ? schedule.accountId : null,
+      debtId: schedule.kind === 'emi' && typeof schedule.debtId === 'string' && schedule.debtId ? schedule.debtId : null,
     }))
 }
 
@@ -240,6 +244,24 @@ function normalizeStatementAliases(aliases) {
 export function normalizeData(raw) {
   if (!raw || typeof raw !== 'object') return emptyData()
 
+  const seenDebtIds = new Set()
+  const debts = Array.isArray(raw.debts)
+    ? raw.debts.map(normalizeDebt).filter((debt) => {
+        if (!debt || seenDebtIds.has(debt.id)) return false
+        seenDebtIds.add(debt.id)
+        return true
+      })
+    : []
+  const debtIds = new Set(debts.map((debt) => debt.id))
+  const seenPaymentIds = new Set()
+  const debtPayments = Array.isArray(raw.debtPayments)
+    ? raw.debtPayments.map(normalizeDebtPayment).filter((payment) => {
+        if (!payment || !debtIds.has(payment.debtId) || seenPaymentIds.has(payment.id)) return false
+        seenPaymentIds.add(payment.id)
+        return true
+      })
+    : []
+
   const expenses = Array.isArray(raw.expenses)
     ? raw.expenses.filter(isValidExpense).map((expense) => ({
         id: expense.id,
@@ -272,6 +294,8 @@ export function normalizeData(raw) {
     budgets: normalizeBudgets(raw.budgets),
     categoryBudgets: normalizeCategoryBudgets(raw.categoryBudgets),
     recurringExpenses: normalizeRecurringExpenses(raw.recurringExpenses),
+    debts,
+    debtPayments,
     expenses,
     accounts: normalizeAccounts(raw.accounts),
     transfers: normalizeTransfers(raw.transfers),

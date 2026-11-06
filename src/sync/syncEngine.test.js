@@ -13,6 +13,7 @@ import {
   getSyncStatus,
   subscribeSyncStatus,
 } from './syncEngine.js'
+import { TABLE_CONFIGS } from './mappers.js'
 
 test('Outbox enqueues, lists chronologically, and removes mutations', async () => {
   await clearOutbox()
@@ -84,6 +85,91 @@ test('pushOutbox batches upserts and clears outbox with fake Supabase client', a
   const pending = await getPendingMutations()
   assert.equal(pending.length, 0)
   assert.equal(getSyncStatus().state, 'synced')
+})
+
+test('debt and payment mappers preserve fields and push parent debts first', async () => {
+  await clearOutbox()
+
+  const debt = {
+    id: 'debt_1',
+    kind: 'shark',
+    category: 'Informal Loan',
+    name: 'Family loan',
+    lender: 'Relative',
+    originalAmount: 500000,
+    balance: 480000,
+    rate: null,
+    emi: null,
+    nextDue: null,
+    monthsRemaining: null,
+    totalMonths: null,
+    principalPaid: 20000,
+    interestPaid: 3000,
+    limitAmount: null,
+    apr: null,
+    minDue: null,
+    borrower: 'Relative',
+    monthlyRate: 2,
+    nextInterestDue: '2026-09-07',
+    loanTakenDate: '2026-05-31',
+    status: 'active',
+  }
+  const payment = {
+    id: 'payment_1',
+    debtId: debt.id,
+    amount: 10000,
+    principal: 8000,
+    interest: 1800,
+    fees: 200,
+    date: '2026-08-02',
+    note: 'Monthly payment',
+  }
+  await enqueueMutation({ table: 'debt_payments', id: payment.id, op: 'upsert', payload: payment })
+  await enqueueMutation({ table: 'debts', id: debt.id, op: 'upsert', payload: debt })
+
+  const tables = []
+  const rowsByTable = {}
+  const result = await pushOutbox({
+    from(table) {
+      return {
+        upsert(rows) {
+          tables.push(table)
+          rowsByTable[table] = rows
+          return Promise.resolve({ error: null })
+        },
+      }
+    },
+  }, 'user_123')
+
+  assert.equal(result.success, true)
+  assert.deepEqual(tables, ['debts', 'debt_payments'])
+  assert.equal(rowsByTable.debts[0].original_amount, 500000)
+  assert.equal(rowsByTable.debts[0].monthly_rate, 2)
+  assert.equal(rowsByTable.debt_payments[0].debt_id, debt.id)
+  assert.equal(rowsByTable.debt_payments[0].principal, 8000)
+  assert.deepEqual(TABLE_CONFIGS.debt_payments.toClient(rowsByTable.debt_payments[0]), payment)
+
+  await clearOutbox()
+})
+
+test('recurring schedule mapper preserves an optional linked debt id', () => {
+  const schedule = {
+    id: 'emi_1',
+    name: 'Home loan EMI',
+    amount: 1000,
+    category: 'Housing',
+    note: 'Home loan EMI',
+    day: 5,
+    startMonth: '2026-10',
+    kind: 'emi',
+    installments: 12,
+    accountId: 'account_1',
+    debtId: 'loan_1',
+  }
+  const row = TABLE_CONFIGS.recurring_schedules.toRow(schedule, 'user_1')
+
+  assert.equal(row.debt_id, 'loan_1')
+  assert.equal(TABLE_CONFIGS.recurring_schedules.toClient(row).debtId, 'loan_1')
 })
 
 test('pushOutbox executes update({ deleted_at }) for delete operations', async () => {
@@ -286,4 +372,3 @@ test('pushOutbox transitions status to error and retains outbox on failure', asy
 
   await clearOutbox()
 })
-

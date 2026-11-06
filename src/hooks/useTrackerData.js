@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { emptyData, loadData, saveData, normalizeData, saveLocalData } from '../utils/storage.js'
-import { addRecurringExpenses, syncRecurringExpenseToExpenses } from '../utils/recurring.js'
+import { addRecurringExpenses, applyLinkedEmiPayments, syncLinkedEmiAmounts, syncRecurringExpenseToExpenses } from '../utils/recurring.js'
 import { createId, isValidDate, todayISO } from '../utils/formatting.js'
 import { normalizeNarration } from '../utils/reconcile.js'
+import { applyDebtPayment, normalizeDebt, normalizeDebtPayment, parseDebtImport } from '../utils/debts.js'
 import { isSupabaseConfigured, supabase } from '../utils/supabase.js'
 import { enqueueMutation } from '../sync/outbox.js'
 import {
@@ -15,6 +16,45 @@ import {
 } from '../sync/syncEngine.js'
 
 const DEBOUNCE_SAVE_MS = 350
+
+function materializeRecurringData(data, month, applyToExistingSchedules = []) {
+  const withExpenses = addRecurringExpenses(syncLinkedEmiAmounts(data), month)
+  const previousExpenseIds = new Set((data.expenses || []).map((expense) => expense.id))
+  const eligibleExpenseIds = new Set(
+    withExpenses.expenses
+      .filter((expense) => !previousExpenseIds.has(expense.id))
+      .map((expense) => expense.id)
+  )
+  for (const scheduleId of applyToExistingSchedules) {
+    eligibleExpenseIds.add(`recurring_${scheduleId}_${month}`)
+  }
+  const next = applyLinkedEmiPayments(withExpenses, month, eligibleExpenseIds)
+  const schedulesById = new Map((next.recurringExpenses || []).map((schedule) => [schedule.id, schedule]))
+  const previousExpenses = new Map((data.expenses || []).map((expense) => [expense.id, expense]))
+
+  for (const expense of next.expenses) {
+    const schedule = schedulesById.get(expense.recurringId)
+    if (schedule?.kind !== 'emi' || expense.date?.slice(0, 7) !== month) continue
+    if (previousExpenses.get(expense.id) === expense) continue
+    enqueueMutation({ table: 'expenses', id: expense.id, op: 'upsert', payload: expense })
+  }
+
+  const previousDebts = new Map((data.debts || []).map((debt) => [debt.id, debt]))
+  for (const debt of next.debts || []) {
+    if (previousDebts.get(debt.id) !== debt) {
+      enqueueMutation({ table: 'debts', id: debt.id, op: 'upsert', payload: debt })
+    }
+  }
+
+  const previousPaymentIds = new Set((data.debtPayments || []).map((payment) => payment.id))
+  for (const payment of next.debtPayments || []) {
+    if (!previousPaymentIds.has(payment.id)) {
+      enqueueMutation({ table: 'debt_payments', id: payment.id, op: 'upsert', payload: payment })
+    }
+  }
+
+  return next
+}
 
 export function useTrackerData(authReady, authUser, month) {
   const [data, setData] = useState(() => emptyData())
@@ -51,6 +91,12 @@ export function useTrackerData(authReady, authUser, month) {
       } else if (table === 'transfers') {
         const remaining = (current.transfers || []).filter((t) => t.id !== id)
         next.transfers = isDeleted || !record ? remaining : [record, ...remaining]
+      } else if (table === 'debts') {
+        const remaining = (current.debts || []).filter((debt) => debt.id !== id)
+        next.debts = isDeleted || !record ? remaining : [record, ...remaining]
+      } else if (table === 'debt_payments') {
+        const remaining = (current.debtPayments || []).filter((payment) => payment.id !== id)
+        next.debtPayments = isDeleted || !record ? remaining : [record, ...remaining]
       } else if (table === 'recurring_schedules') {
         const remaining = (current.recurringExpenses || []).filter((r) => r.id !== id)
         next.recurringExpenses = isDeleted || !record ? remaining : [...remaining, record]
@@ -128,7 +174,7 @@ export function useTrackerData(authReady, authUser, month) {
 
     loadData().then(async (loadedData) => {
       if (!active) return
-      const withRecurring = addRecurringExpenses(loadedData, monthRef.current)
+      const withRecurring = materializeRecurringData(loadedData, monthRef.current)
       setData(withRecurring)
       loadedUserIdRef.current = userId
       setReady(true)
@@ -163,8 +209,10 @@ export function useTrackerData(authReady, authUser, month) {
   // 3. Materialize recurring expenses when month changes (smoothly in memory, no unmounting)
   useEffect(() => {
     if (!ready) return
-    setData((current) => addRecurringExpenses(current, month))
-  }, [month, ready])
+    const current = dataRef.current
+    const next = materializeRecurringData(current, month)
+    if (next !== current) setData(next)
+  }, [month, ready, data])
 
   // 4. Debounced Snapshot Backup Effect
   useEffect(() => {
@@ -224,6 +272,57 @@ export function useTrackerData(authReady, authUser, month) {
       ...current,
       expenses: current.expenses.filter((item) => item.id !== expenseId),
     }))
+  }, [])
+
+  const saveDebt = useCallback((fields, existingId) => {
+    const id = existingId || fields.id || createId()
+    const normalized = normalizeDebt({ ...fields, id })
+    if (!normalized) return { ok: false, error: 'Enter a name, original amount, and valid balance.' }
+
+    enqueueMutation({ table: 'debts', id, op: 'upsert', payload: normalized })
+    setData((current) => ({
+      ...current,
+      debts: existingId
+        ? (current.debts || []).map((debt) => debt.id === existingId ? normalized : debt)
+        : [normalized, ...(current.debts || [])],
+    }))
+    return { ok: true }
+  }, [])
+
+  const recordDebtPayment = useCallback((debtId, fields) => {
+    const currentDebt = dataRef.current?.debts?.find((debt) => debt.id === debtId)
+    if (!currentDebt) return { ok: false, error: 'This debt could not be found.' }
+
+    const payment = normalizeDebtPayment({ ...fields, id: createId(), debtId })
+    if (!payment || payment.principal > currentDebt.balance) {
+      return { ok: false, error: 'Enter a valid payment with principal no greater than the remaining balance.' }
+    }
+
+    const updatedDebt = applyDebtPayment(currentDebt, payment)
+    if (!updatedDebt) return { ok: false, error: 'The debt balance could not be updated.' }
+
+    enqueueMutation({ table: 'debts', id: debtId, op: 'upsert', payload: updatedDebt })
+    enqueueMutation({ table: 'debt_payments', id: payment.id, op: 'upsert', payload: payment })
+    setData((current) => ({
+      ...current,
+      debts: (current.debts || []).map((debt) => debt.id === debtId ? updatedDebt : debt),
+      debtPayments: [payment, ...(current.debtPayments || [])],
+    }))
+    return { ok: true }
+  }, [])
+
+  const importDebts = useCallback((text) => {
+    const result = parseDebtImport(text)
+    if (!result.ok) return result
+    const currentIds = new Set((dataRef.current?.debts || []).map((debt) => debt.id))
+    const additions = result.debts.filter((debt) => !currentIds.has(debt.id))
+    for (const debt of additions) {
+      enqueueMutation({ table: 'debts', id: debt.id, op: 'upsert', payload: debt })
+    }
+    if (additions.length) {
+      setData((current) => ({ ...current, debts: [...additions, ...(current.debts || [])] }))
+    }
+    return { ok: true, imported: additions.length, skipped: result.skipped + result.debts.length - additions.length }
   }, [])
 
   const importBatchExpenses = useCallback((newExpenses) => {
@@ -494,13 +593,12 @@ export function useTrackerData(authReady, authUser, month) {
       op: 'upsert',
       payload: schedule,
     })
-    setData((current) => {
-      const withSchedule = {
-        ...current,
-        recurringExpenses: [...(current.recurringExpenses || []), schedule],
-      }
-      return addRecurringExpenses(withSchedule, monthRef.current)
-    })
+    const current = dataRef.current
+    const withSchedule = {
+      ...current,
+      recurringExpenses: [...(current.recurringExpenses || []), schedule],
+    }
+    setData(materializeRecurringData(withSchedule, monthRef.current))
   }, [])
 
   const updateRecurringExpense = useCallback((schedule) => {
@@ -511,33 +609,32 @@ export function useTrackerData(authReady, authUser, month) {
       op: 'upsert',
       payload: schedule,
     })
-    setData((current) => {
-      const nextSchedules = (current.recurringExpenses || []).map((item) =>
-        item.id === schedule.id ? schedule : item
-      )
+    const current = dataRef.current
+    const nextSchedules = (current.recurringExpenses || []).map((item) =>
+      item.id === schedule.id ? schedule : item
+    )
+    const currentMonthKey = monthRef.current
+    const paymentId = `recurring_emi_${schedule.id}_${currentMonthKey}`
+    const alreadyApplied = (current.debtPayments || []).some((payment) => payment.id === paymentId)
+    const { expenses: nextExpenses, updatedExpenses } = alreadyApplied
+      ? { expenses: current.expenses, updatedExpenses: [] }
+      : syncRecurringExpenseToExpenses(current.expenses, schedule, currentMonthKey)
 
-      const currentMonthKey = monthRef.current
-      const { expenses: nextExpenses, updatedExpenses } = syncRecurringExpenseToExpenses(
-        current.expenses,
-        schedule,
-        currentMonthKey
-      )
+    for (const updatedExp of updatedExpenses) {
+      enqueueMutation({
+        table: 'expenses',
+        id: updatedExp.id,
+        op: 'upsert',
+        payload: updatedExp,
+      })
+    }
 
-      for (const updatedExp of updatedExpenses) {
-        enqueueMutation({
-          table: 'expenses',
-          id: updatedExp.id,
-          op: 'upsert',
-          payload: updatedExp,
-        })
-      }
-
-      return {
-        ...current,
-        recurringExpenses: nextSchedules,
-        expenses: nextExpenses,
-      }
-    })
+    const updated = materializeRecurringData({
+      ...current,
+      recurringExpenses: nextSchedules,
+      expenses: nextExpenses,
+    }, currentMonthKey, schedule.debtId ? [schedule.id] : [])
+    setData(updated)
   }, [])
 
   const deleteRecurringExpense = useCallback((scheduleId) => {
@@ -685,11 +782,29 @@ export function useTrackerData(authReady, authUser, month) {
 
   const importData = useCallback((imported) => {
     const normalized = normalizeData(imported)
+    for (const payment of dataRef.current?.debtPayments || []) {
+      enqueueMutation({ table: 'debt_payments', id: payment.id, op: 'delete' })
+    }
+    for (const debt of dataRef.current?.debts || []) {
+      enqueueMutation({ table: 'debts', id: debt.id, op: 'delete' })
+    }
+    for (const debt of normalized.debts) {
+      enqueueMutation({ table: 'debts', id: debt.id, op: 'upsert', payload: debt })
+    }
+    for (const payment of normalized.debtPayments) {
+      enqueueMutation({ table: 'debt_payments', id: payment.id, op: 'upsert', payload: payment })
+    }
     setData(normalized)
     saveLocalData(normalized)
   }, [])
 
   const clearAllData = useCallback(() => {
+    for (const payment of dataRef.current?.debtPayments || []) {
+      enqueueMutation({ table: 'debt_payments', id: payment.id, op: 'delete' })
+    }
+    for (const debt of dataRef.current?.debts || []) {
+      enqueueMutation({ table: 'debts', id: debt.id, op: 'delete' })
+    }
     const empty = emptyData()
     setData(empty)
     saveLocalData(empty)
@@ -778,6 +893,9 @@ export function useTrackerData(authReady, authUser, month) {
     retrySync,
     upsertExpense,
     deleteExpense,
+    saveDebt,
+    recordDebtPayment,
+    importDebts,
     importBatchExpenses,
     deleteBatchExpenses,
     updateBatchExpenses,

@@ -12,6 +12,7 @@ import Dashboard from './pages/Dashboard.jsx'
 import History from './pages/History.jsx'
 import Review from './pages/Review.jsx'
 import Settings from './pages/Settings.jsx'
+import DebtTracker from './pages/DebtTracker.jsx'
 import AuthForm from './components/AuthForm.jsx'
 import ThemeToggle from './components/ThemeToggle.jsx'
 import { IconCamera, IconFileSpreadsheet, IconPlus } from '@tabler/icons-react'
@@ -23,9 +24,10 @@ import { useAuth } from './hooks/useAuth.js'
 import { useTrackerData } from './hooks/useTrackerData.js'
 
 const PAGES = [
-  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'dashboard', label: 'Dashboard', compactLabel: 'Home' },
   { id: 'history', label: 'History' },
-  { id: 'review', label: 'Monthly Review' },
+  { id: 'review', label: 'Monthly Review', compactLabel: 'Review' },
+  { id: 'debts', label: 'Debts' },
   { id: 'settings', label: 'Settings' },
 ]
 
@@ -51,6 +53,9 @@ export default function App() {
     retrySync,
     upsertExpense,
     deleteExpense,
+    saveDebt,
+    recordDebtPayment,
+    importDebts,
     importBatchExpenses,
     deleteBatchExpenses,
     updateBatchExpenses,
@@ -325,9 +330,11 @@ export default function App() {
             type="button"
             className={page === item.id ? 'active' : ''}
             aria-current={page === item.id ? 'page' : undefined}
+            aria-label={item.label}
             onClick={() => setPage(item.id)}
           >
-            {item.label}
+            <span className="tab-label-full">{item.label}</span>
+            <span className="tab-label-compact">{item.compactLabel || item.label}</span>
           </button>
         ))}
       </nav>
@@ -372,6 +379,17 @@ export default function App() {
 
         {page === 'review' ? (
           <Review summary={summary} previousSummary={previousSummary} month={month} />
+        ) : null}
+
+        {page === 'debts' ? (
+          <DebtTracker
+            debts={data.debts || []}
+            payments={data.debtPayments || []}
+            recurringExpenses={data.recurringExpenses || []}
+            onSaveDebt={saveDebt}
+            onRecordPayment={recordDebtPayment}
+            onImportDebts={importDebts}
+          />
         ) : null}
 
         {page === 'settings' ? (
@@ -535,4 +553,3 @@ export default function App() {
     </div>
   )
 }
-

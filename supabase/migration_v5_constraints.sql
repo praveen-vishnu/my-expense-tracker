@@ -20,3 +20,4 @@ begin
     alter table public.category_budgets add constraint category_budgets_amount_check check (amount >= 0);
   end if;
 end $$;
+

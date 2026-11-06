@@ -1,6 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { addRecurringExpenses, syncRecurringExpenseToExpenses } from './recurring.js'
+import {
+  addRecurringExpenses,
+  applyLinkedEmiPayments,
+  syncLinkedEmiAmounts,
+  syncRecurringExpenseToExpenses,
+} from './recurring.js'
 
 test('addRecurringExpenses generates monthly and EMI expenses with deterministic IDs', () => {
   const data = {
@@ -96,6 +101,115 @@ test('addRecurringExpenses is idempotent and does not duplicate existing generat
   assert.equal(updated.expenses.length, 1)
 })
 
+test('linked EMI schedule keeps the debt tracker monthly payment in sync', () => {
+  const data = {
+    recurringExpenses: [{
+      id: 'home_emi',
+      name: 'Home loan EMI',
+      amount: 1000,
+      category: 'Housing',
+      day: 10,
+      startMonth: '2026-10',
+      kind: 'emi',
+      installments: 12,
+      debtId: 'home_loan',
+    }],
+    debts: [{
+      id: 'home_loan',
+      name: 'Home loan',
+      originalAmount: 10000,
+      balance: 10000,
+      emi: 900,
+    }],
+  }
+
+  const updated = syncLinkedEmiAmounts(data)
+  assert.equal(updated.debts[0].emi, 1000)
+  assert.equal(syncLinkedEmiAmounts(updated), updated)
+})
+
+test('linked EMI generation records one principal and interest payment against its debt', () => {
+  const data = {
+    recurringExpenses: [{
+      id: 'home_emi',
+      name: 'Home loan EMI',
+      amount: 1000,
+      category: 'Housing',
+      day: 10,
+      startMonth: '2026-10',
+      kind: 'emi',
+      installments: 2,
+      debtId: 'home_loan',
+    }],
+    debts: [{
+      id: 'home_loan',
+      name: 'Home loan',
+      originalAmount: 10000,
+      balance: 10000,
+      rate: 12,
+      status: 'active',
+    }],
+    debtPayments: [],
+    expenses: [],
+  }
+
+  const generated = addRecurringExpenses(data, '2026-10')
+  const paid = applyLinkedEmiPayments(generated, '2026-10', undefined, '2026-10')
+
+  assert.equal(paid.expenses[0].amount, 1000)
+  assert.equal(paid.debts[0].balance, 9100)
+  assert.equal(paid.debts[0].principalPaid, 900)
+  assert.equal(paid.debts[0].interestPaid, 100)
+  assert.equal(paid.debts[0].monthsRemaining, 1)
+  assert.equal(paid.debts[0].nextDue, '2026-11-10')
+  assert.deepEqual(paid.debtPayments[0], {
+    id: 'recurring_emi_home_emi_2026-10',
+    debtId: 'home_loan',
+    amount: 1000,
+    principal: 900,
+    interest: 100,
+    fees: 0,
+    date: '2026-10-10',
+    note: 'Home loan EMI · automatic EMI',
+  })
+
+  const repeated = applyLinkedEmiPayments(addRecurringExpenses(paid, '2026-10'), '2026-10', undefined, '2026-10')
+  assert.deepEqual(repeated, paid)
+})
+
+test('linked EMI uses the smaller payoff amount and stops generating installments after payoff', () => {
+  const data = {
+    recurringExpenses: [{
+      id: 'small_emi',
+      name: 'Small loan EMI',
+      amount: 1000,
+      category: 'Loans',
+      day: 5,
+      startMonth: '2026-10',
+      kind: 'emi',
+      installments: 3,
+      debtId: 'small_loan',
+    }],
+    debts: [{
+      id: 'small_loan',
+      name: 'Small loan',
+      originalAmount: 500,
+      balance: 500,
+      rate: 12,
+      status: 'active',
+    }],
+    debtPayments: [],
+    expenses: [],
+  }
+
+  const paid = applyLinkedEmiPayments(addRecurringExpenses(data, '2026-10'), '2026-10', undefined, '2026-10')
+  assert.equal(paid.expenses[0].amount, 505)
+  assert.equal(paid.debts[0].balance, 0)
+  assert.equal(paid.debts[0].status, 'paid')
+  assert.equal(paid.debts[0].nextDue, null)
+  assert.equal(addRecurringExpenses(paid, '2026-11').expenses.length, 1)
+})
+
 test('syncRecurringExpenseToExpenses updates matching materialized expenses for the month', () => {
   const expenses = [
     {
@@ -135,4 +249,3 @@ test('syncRecurringExpenseToExpenses updates matching materialized expenses for 
   const unchanged = result.expenses.find((e) => e.id === 'exp_other')
   assert.equal(unchanged.amount, 250)
 })
-
