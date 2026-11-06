@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import ModalSheet from '../components/ModalSheet.jsx'
 import { parseImportedJson } from '../utils/storage.js'
 import { formatINR, formatMonthLabel, parseAmount, createId } from '../utils/formatting.js'
 import { getStoredGeminiKey, saveStoredGeminiKey } from '../utils/geminiScanner.js'
@@ -27,13 +28,14 @@ export default function Settings({
   const categoryInputRef = useRef(null)
   const accountInputRef = useRef(null)
   const scheduleFields = useRef({})
-  const scheduleFormRef = useRef(null)
+  const scheduleNameRef = useRef(null)
 
   const [categoryName, setCategoryName] = useState('')
   const [feedback, setFeedback] = useState({ section: '', error: '', message: '', field: '' })
   const [budgetInput, setBudgetInput] = useState(budget ? String(budget) : '')
 
   const [editingScheduleId, setEditingScheduleId] = useState(null)
+  const [scheduleEditorOpen, setScheduleEditorOpen] = useState(false)
   const [scheduleName, setScheduleName] = useState('')
   const [scheduleAmount, setScheduleAmount] = useState('')
   const [scheduleCategory, setScheduleCategory] = useState(data.categories[0] || '')
@@ -190,13 +192,25 @@ export default function Settings({
     setScheduleAccountId(schedule.accountId || '')
     setScheduleDebtId(schedule.debtId || '')
     setFeedback({ section: '', error: '', message: '', field: '' })
-    scheduleFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    setTimeout(() => {
-      scheduleFields.current.name?.focus()
-    }, 100)
+    setScheduleEditorOpen(true)
+  }
+
+  function handleStartAddRecurring() {
+    setEditingScheduleId(null)
+    setScheduleName('')
+    setScheduleAmount('')
+    setScheduleCategory(data.categories[0] || '')
+    setScheduleDay('1')
+    setScheduleKind('monthly')
+    setScheduleInstallments('')
+    setScheduleAccountId(data.accounts?.find((a) => a.isDefault)?.id || '')
+    setScheduleDebtId('')
+    setFeedback({ section: '', error: '', message: '', field: '' })
+    setScheduleEditorOpen(true)
   }
 
   function handleCancelEditRecurring() {
+    setScheduleEditorOpen(false)
     setEditingScheduleId(null)
     setScheduleName('')
     setScheduleAmount('')
@@ -281,6 +295,16 @@ export default function Settings({
       reportMessage('schedule', 'Recurring schedule added.')
     }
   }
+
+  const availableDebts = (data.debts || []).filter((debt) =>
+    (debt.status !== 'paid' && debt.balance > 0 && debt.kind !== 'credit_card') ||
+    debt.id === scheduleDebtId
+  ).filter((debt) =>
+    !(data.recurringExpenses || []).some((schedule) =>
+      schedule.id !== editingScheduleId && schedule.debtId === debt.id
+    )
+  )
+  const selectedDebt = availableDebts.find((debt) => debt.id === scheduleDebtId)
 
   return (
     <div className="page">
@@ -466,120 +490,32 @@ export default function Settings({
         {feedback.section === 'budget' && feedback.message ? <p className="form-ok" role="status" aria-live="polite">{feedback.message}</p> : null}
       </section>
 
-      <section className="panel stack">
-        <div>
+      <section className="panel stack recurring-section">
+        <div className="recurring-section-head">
+          <div>
           <h2>Recurring expenses & EMIs</h2>
-          <p className="muted">Automatically add monthly bills or EMIs and deduct from accounts in {formatMonthLabel(month)}. Link an EMI to a debt to update its balance and payment history automatically when that month’s EMI is generated.</p>
+            <p className="muted">Monthly bills and loan payments scheduled for {formatMonthLabel(month)}.</p>
+          </div>
+          <button type="button" className="btn btn-primary" onClick={handleStartAddRecurring}>
+            Add schedule
+          </button>
         </div>
-        {editingScheduleId ? (
-          <div className="editing-banner">
-            <span>
-              Editing recurring schedule: <strong>{scheduleName || 'Selected schedule'}</strong>
-            </span>
-            <button type="button" className="text-btn" onClick={handleCancelEditRecurring}>
-              Cancel editing
-            </button>
-          </div>
-        ) : null}
-        <form ref={scheduleFormRef} className="recurring-form" noValidate onSubmit={handleRecurringSubmit}>
-          <label className="field">
-            <span>Name</span>
-            <input ref={(element) => { scheduleFields.current.name = element }} value={scheduleName} required aria-invalid={feedback.section === 'schedule' && feedback.field === 'name'} aria-describedby={feedback.section === 'schedule' && feedback.field === 'name' ? 'schedule-error' : undefined} onChange={(event) => setScheduleName(event.target.value)} placeholder="Home loan EMI" />
-          </label>
-          <label className="field">
-            <span>Amount</span>
-            <div className="amount-input"><span>₹</span><input ref={(element) => { scheduleFields.current.amount = element }} type="text" inputMode="decimal" value={scheduleAmount} required aria-invalid={feedback.section === 'schedule' && feedback.field === 'amount'} aria-describedby={feedback.section === 'schedule' && feedback.field === 'amount' ? 'schedule-error' : undefined} onChange={(event) => setScheduleAmount(event.target.value)} placeholder="25000" /></div>
-          </label>
-          <label className="field">
-            <span>Category</span>
-            <select ref={(element) => { scheduleFields.current.category = element }} value={scheduleCategory} required aria-invalid={feedback.section === 'schedule' && feedback.field === 'category'} aria-describedby={feedback.section === 'schedule' && feedback.field === 'category' ? 'schedule-error' : undefined} onChange={(event) => setScheduleCategory(event.target.value)}>
-              <option value="">Choose a category</option>
-              {data.categories.map((name) => <option key={name} value={name}>{name}</option>)}
-            </select>
-          </label>
-          <label className="field">
-            <span>Deduct from account</span>
-            <select
-              value={scheduleAccountId}
-              onChange={(event) => setScheduleAccountId(event.target.value)}
-            >
-              <option value="">Unassigned (No account deduction)</option>
-              {data.accounts?.map((acc) => (
-                <option key={acc.id} value={acc.id}>
-                  {acc.name} ({acc.type === 'credit_card' ? 'Credit Card' : acc.type === 'bank' ? 'Bank' : acc.type === 'wallet' ? 'Wallet' : 'Cash'})
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="field">
-            <span>Day of month</span>
-            <input ref={(element) => { scheduleFields.current.day = element }} type="number" min="1" max="31" value={scheduleDay} required aria-invalid={feedback.section === 'schedule' && feedback.field === 'day'} aria-describedby={feedback.section === 'schedule' && feedback.field === 'day' ? 'schedule-error' : undefined} onChange={(event) => setScheduleDay(event.target.value)} />
-          </label>
-          <label className="field">
-            <span>Type</span>
-            <select value={scheduleKind} onChange={(event) => setScheduleKind(event.target.value)}>
-              <option value="monthly">Monthly</option>
-              <option value="emi">EMI</option>
-            </select>
-          </label>
-          {scheduleKind === 'emi' ? (
-            <>
-              <label className="field">
-                <span>Installments</span>
-                <input ref={(element) => { scheduleFields.current.installments = element }} type="number" min="1" value={scheduleInstallments} required aria-invalid={feedback.section === 'schedule' && feedback.field === 'installments'} aria-describedby={feedback.section === 'schedule' && feedback.field === 'installments' ? 'schedule-error' : undefined} onChange={(event) => setScheduleInstallments(event.target.value)} placeholder="24" />
-              </label>
-              <label className="field linked-debt-field">
-                <span>Linked debt (optional)</span>
-                <select
-                  ref={(element) => { scheduleFields.current.debt = element }}
-                  value={scheduleDebtId}
-                  aria-invalid={feedback.section === 'schedule' && feedback.field === 'debt'}
-                  aria-describedby={feedback.section === 'schedule' && feedback.field === 'debt' ? 'schedule-error' : undefined}
-                  onChange={(event) => setScheduleDebtId(event.target.value)}
-                >
-                  <option value="">Do not link a debt</option>
-                  {(data.debts || [])
-                    .filter((debt) =>
-                      debt.status !== 'paid' &&
-                      debt.balance > 0 &&
-                      debt.kind !== 'credit_card' &&
-                      !(data.recurringExpenses || []).some((schedule) =>
-                        schedule.id !== editingScheduleId && schedule.debtId === debt.id
-                      )
-                    )
-                    .map((debt) => <option key={debt.id} value={debt.id}>{debt.name} · {formatINR(debt.balance)} remaining</option>)}
-                </select>
-                <small className="muted">Linked EMI expenses automatically reduce the debt. Interest is estimated from the debt’s saved rate.</small>
-              </label>
-            </>
-          ) : null}
-          <div className="recurring-form-actions">
-            <button type="submit" className="btn btn-secondary">
-              {editingScheduleId ? 'Save changes' : 'Add schedule'}
-            </button>
-            {editingScheduleId ? (
-              <button type="button" className="btn btn-ghost" onClick={handleCancelEditRecurring}>
-                Cancel
-              </button>
-            ) : null}
-          </div>
-        </form>
-        {feedback.section === 'schedule' && feedback.error ? <p id="schedule-error" className="form-error" role="alert">{feedback.error}</p> : null}
         {feedback.section === 'schedule' && feedback.message ? <p className="form-ok" role="status" aria-live="polite">{feedback.message}</p> : null}
         {data.recurringExpenses.length ? (
           <ul className="schedule-list">
             {data.recurringExpenses.map((schedule) => {
               const account = data.accounts?.find((a) => a.id === schedule.accountId)
               const linkedDebt = (data.debts || []).find((debt) => debt.id === schedule.debtId)
-              const isEditing = editingScheduleId === schedule.id
               return (
-                <li key={schedule.id} className={isEditing ? 'schedule-item-editing' : ''}>
-                  <span>
+                <li key={schedule.id}>
+                  <span className="schedule-info">
                     <strong>{schedule.name}</strong>
                     <small>
-                      {schedule.kind === 'emi' ? `EMI · ${schedule.installments} installments` : 'Monthly'} · Day {schedule.day}
-                      {account ? ` · Deducts from ${account.name}` : ''}
-                      {linkedDebt ? ` · Pays down ${linkedDebt.name}` : ''}
+                      {schedule.kind === 'emi' ? `EMI · ${schedule.installments} installments` : 'Monthly expense'} · Due day {schedule.day}
+                    </small>
+                    <small className="schedule-link-info">
+                      {account ? `From ${account.name}` : 'No account selected'}
+                      {linkedDebt ? ` · Tracks ${linkedDebt.name}` : ''}
                     </small>
                   </span>
                   <span className="schedule-actions">
@@ -590,16 +526,13 @@ export default function Settings({
                       aria-label={`Edit recurring schedule: ${schedule.name}`}
                       onClick={() => handleStartEditRecurring(schedule)}
                     >
-                      {isEditing ? 'Editing…' : 'Edit'}
+                      Edit
                     </button>
                     <button
                       type="button"
                       className="text-btn danger"
                       aria-label={`Remove recurring schedule: ${schedule.name}`}
-                      onClick={() => {
-                        if (editingScheduleId === schedule.id) handleCancelEditRecurring()
-                        onDeleteRecurring(schedule)
-                      }}
+                      onClick={() => onDeleteRecurring(schedule)}
                     >
                       Remove
                     </button>
@@ -608,8 +541,124 @@ export default function Settings({
               )
             })}
           </ul>
-        ) : <p className="muted">No recurring schedules yet.</p>}
+        ) : (
+          <p className="recurring-empty-state">No schedules yet. Add one to automatically record a monthly bill or EMI.</p>
+        )}
       </section>
+
+      {scheduleEditorOpen ? (
+        <ModalSheet
+          titleId="recurring-editor-title"
+          descriptionId="recurring-editor-description"
+          initialFocusRef={scheduleNameRef}
+          onDismiss={handleCancelEditRecurring}
+          className="schedule-sheet"
+        >
+          <form className="sheet-form schedule-editor-form" noValidate onSubmit={handleRecurringSubmit}>
+            <div className="sheet-head">
+              <div>
+                <span className="schedule-editor-kicker">{editingScheduleId ? 'Edit schedule' : 'New schedule'}</span>
+                <h2 id="recurring-editor-title">{editingScheduleId ? 'Edit recurring expense' : 'Add recurring expense'}</h2>
+                <p id="recurring-editor-description" className="muted">
+                  Set the amount, due day, and account for this monthly entry.
+                </p>
+              </div>
+              <button type="button" className="text-btn" onClick={handleCancelEditRecurring}>Close</button>
+            </div>
+
+            <section className="schedule-editor-section" aria-labelledby="schedule-details-title">
+              <h3 id="schedule-details-title">Expense details</h3>
+              <div className="schedule-editor-grid">
+                <label className="field schedule-field-wide">
+                  <span>Name</span>
+                  <input ref={(element) => { scheduleFields.current.name = element; scheduleNameRef.current = element }} value={scheduleName} required aria-invalid={feedback.section === 'schedule' && feedback.field === 'name'} aria-describedby={feedback.section === 'schedule' && feedback.field === 'name' ? 'schedule-error' : undefined} onChange={(event) => setScheduleName(event.target.value)} placeholder="Home loan EMI" />
+                </label>
+                <label className="field">
+                  <span>Amount</span>
+                  <div className="amount-input"><span>₹</span><input ref={(element) => { scheduleFields.current.amount = element }} type="text" inputMode="decimal" value={scheduleAmount} required aria-invalid={feedback.section === 'schedule' && feedback.field === 'amount'} aria-describedby={feedback.section === 'schedule' && feedback.field === 'amount' ? 'schedule-error' : undefined} onChange={(event) => setScheduleAmount(event.target.value)} placeholder="25000" /></div>
+                </label>
+                <label className="field">
+                  <span>Category</span>
+                  <select ref={(element) => { scheduleFields.current.category = element }} value={scheduleCategory} required aria-invalid={feedback.section === 'schedule' && feedback.field === 'category'} aria-describedby={feedback.section === 'schedule' && feedback.field === 'category' ? 'schedule-error' : undefined} onChange={(event) => setScheduleCategory(event.target.value)}>
+                    <option value="">Choose a category</option>
+                    {data.categories.map((name) => <option key={name} value={name}>{name}</option>)}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Deduct from account</span>
+                  <select value={scheduleAccountId} onChange={(event) => setScheduleAccountId(event.target.value)}>
+                    <option value="">Unassigned (no account deduction)</option>
+                    {data.accounts?.map((acc) => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.name} ({acc.type === 'credit_card' ? 'Credit Card' : acc.type === 'bank' ? 'Bank' : acc.type === 'wallet' ? 'Wallet' : 'Cash'})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Due day</span>
+                  <input ref={(element) => { scheduleFields.current.day = element }} type="number" min="1" max="31" value={scheduleDay} required aria-invalid={feedback.section === 'schedule' && feedback.field === 'day'} aria-describedby={feedback.section === 'schedule' && feedback.field === 'day' ? 'schedule-error' : undefined} onChange={(event) => setScheduleDay(event.target.value)} />
+                </label>
+                <label className="field">
+                  <span>Schedule type</span>
+                  <select value={scheduleKind} onChange={(event) => { setScheduleKind(event.target.value); if (event.target.value !== 'emi') setScheduleDebtId('') }}>
+                    <option value="monthly">Monthly expense</option>
+                    <option value="emi">Loan EMI</option>
+                  </select>
+                </label>
+              </div>
+            </section>
+
+            {scheduleKind === 'emi' ? (
+              <section className="schedule-editor-section" aria-labelledby="schedule-emi-title">
+                <h3 id="schedule-emi-title">Loan tracking</h3>
+                <div className="schedule-editor-grid">
+                  <label className="field">
+                    <span>Number of installments</span>
+                    <input ref={(element) => { scheduleFields.current.installments = element }} type="number" min="1" value={scheduleInstallments} required aria-invalid={feedback.section === 'schedule' && feedback.field === 'installments'} aria-describedby={feedback.section === 'schedule' && feedback.field === 'installments' ? 'schedule-error' : undefined} onChange={(event) => setScheduleInstallments(event.target.value)} placeholder="24" />
+                  </label>
+                  <label className="field">
+                    <span>Debt to track (optional)</span>
+                    <select
+                      ref={(element) => { scheduleFields.current.debt = element }}
+                      value={scheduleDebtId}
+                      aria-invalid={feedback.section === 'schedule' && feedback.field === 'debt'}
+                      aria-describedby={feedback.section === 'schedule' && feedback.field === 'debt' ? 'schedule-error' : 'schedule-debt-help'}
+                      onChange={(event) => setScheduleDebtId(event.target.value)}
+                    >
+                      <option value="">Do not track a debt</option>
+                      {availableDebts.map((debt) => (
+                        <option key={debt.id} value={debt.id}>{debt.name} ({formatINR(debt.balance)} remaining)</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                {selectedDebt ? (
+                  <div className="schedule-debt-summary">
+                    <strong>{selectedDebt.name}</strong>
+                    <span>{formatINR(selectedDebt.balance)} remaining</span>
+                    <p id="schedule-debt-help">Each generated EMI is recorded as an expense and as a payment against this debt. Interest uses the debt’s saved rate. Existing payment history is not changed by editing this schedule.</p>
+                  </div>
+                ) : (
+                  <p id="schedule-debt-help" className="schedule-debt-help">
+                    {availableDebts.length
+                      ? 'Choose a debt to track its balance alongside this expense. The EMI will still be recorded as an expense if you leave this unlinked.'
+                      : 'No eligible debts are available. Add a debt in Debt Tracker to connect it, or leave this EMI unlinked.'}
+                  </p>
+                )}
+              </section>
+            ) : null}
+
+            {feedback.section === 'schedule' && feedback.error ? <p id="schedule-error" className="form-error" role="alert">{feedback.error}</p> : null}
+            <div className="schedule-editor-actions">
+              <button type="button" className="btn btn-secondary" onClick={handleCancelEditRecurring}>Cancel</button>
+              <button type="submit" className="btn btn-primary">
+                {editingScheduleId ? 'Save changes' : 'Add schedule'}
+              </button>
+            </div>
+          </form>
+        </ModalSheet>
+      ) : null}
 
       <section className="panel stack">
         <h2>Categories</h2>

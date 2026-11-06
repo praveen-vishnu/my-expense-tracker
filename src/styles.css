@@ -1503,87 +1503,18 @@ h2 {
   color: var(--muted);
 }
 
-.recurring-form .btn {
+.recurring-form > .btn {
   min-height: 46px;
   white-space: nowrap;
   justify-self: stretch;
   padding-inline: 1.2rem;
 }
 
-.editing-banner {
+.recurring-section-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.65rem 0.9rem;
-  background: rgba(99, 102, 241, 0.08);
-  border: 1px solid rgba(99, 102, 241, 0.25);
-  border-radius: 8px;
-  font-size: 0.85rem;
-  color: #4f46e5;
-  margin-bottom: 0.5rem;
-}
-
-.editing-banner .text-btn {
-  font-size: 0.8rem;
-  font-weight: 600;
-  text-decoration: underline;
-  cursor: pointer;
-  padding: 0;
-  color: inherit;
-}
-
-.recurring-form-actions {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  justify-self: stretch;
-}
-
-.recurring-form-actions .btn {
-  flex: 1;
-}
-
-.linked-debt-field {
-  grid-column: span 2;
-}
-
-.linked-debt-field small {
-  display: block;
-  line-height: 1.4;
-}
-
-.schedule-list li.schedule-item-editing {
-  background: rgba(99, 102, 241, 0.06);
-  border-radius: 8px;
-  padding: 0.7rem 0.6rem;
-  border-top-color: transparent;
-  outline: 1px solid rgba(99, 102, 241, 0.3);
-}
-
-.recurring-edit-notice {
-  margin-top: 0.75rem;
-  padding: 0.75rem 0.85rem;
-  background: rgba(99, 102, 241, 0.08);
-  border: 1px solid rgba(99, 102, 241, 0.25);
-  border-radius: 8px;
-}
-
-.recurring-edit-notice label {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  font-size: 0.86rem;
-  font-weight: 500;
-  color: #4f46e5;
-  cursor: pointer;
-}
-
-.recurring-edit-notice input[type="checkbox"] {
-  width: 1.05rem;
-  height: 1.05rem;
-  accent-color: #4f46e5;
-  cursor: pointer;
+  gap: 1rem;
 }
 
 .schedule-list {
@@ -1599,20 +1530,142 @@ h2 {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding-top: 0.7rem;
+  padding: 0.9rem 0;
   border-top: 1px solid var(--line);
+}
+
+.schedule-info {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.schedule-info > strong {
+  overflow-wrap: anywhere;
 }
 
 .schedule-list small {
   display: block;
-  margin-top: 0.15rem;
   color: var(--muted);
+}
+
+.schedule-link-info {
+  font-size: 0.76rem;
 }
 
 .schedule-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.8rem;
+  flex-shrink: 0;
+}
+
+.schedule-empty-state {
+  margin: 0;
+  padding: 1rem 0;
+  color: var(--muted);
+}
+
+.schedule-sheet {
+  width: min(680px, calc(100vw - 1.5rem));
+  max-width: calc(100vw - 1.5rem);
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.schedule-editor-form {
+  gap: 1.2rem;
+}
+
+.schedule-editor-kicker {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: var(--pine);
+  font-size: 0.76rem;
+  font-weight: 650;
+}
+
+.schedule-editor-form .sheet-head {
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.schedule-editor-form .sheet-head h2 {
+  margin: 0;
+}
+
+.schedule-editor-form .sheet-head p {
+  margin: 0.35rem 0 0;
+  max-width: 46ch;
+}
+
+.schedule-editor-section {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.schedule-editor-section + .schedule-editor-section {
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.schedule-editor-section h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.schedule-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+  gap: 0.9rem 1rem;
+}
+
+.schedule-editor-grid .field {
+  min-width: 0;
+}
+
+.schedule-editor-grid .schedule-field-wide {
+  grid-column: 1 / -1;
+}
+
+.schedule-debt-summary,
+.schedule-debt-help {
+  margin: 0;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--sage);
+  font-size: 0.82rem;
+}
+
+.schedule-debt-summary {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+}
+
+.schedule-debt-summary span {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.schedule-debt-summary p {
+  grid-column: 1 / -1;
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.schedule-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--line);
 }
 
 .fab {
@@ -1773,31 +1826,30 @@ h2 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .recurring-form .field:first-child,
-  .recurring-form .btn,
-  .recurring-form-actions {
+  .recurring-form > .field:first-child,
+  .recurring-form > .btn {
     grid-column: 1 / -1;
+  }
+
+  .recurring-section-head {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .schedule-list li {
     align-items: flex-start;
     flex-direction: column;
   }
+
+  .schedule-actions {
+    justify-content: space-between;
+    width: 100%;
+  }
 }
 
 @media (min-width: 761px) and (max-width: 1023px) {
   .recurring-form {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .recurring-form .field:first-child,
-  .linked-debt-field {
-    grid-column: 1 / -1;
-  }
-
-  .recurring-form-actions {
-    grid-column: 1 / -1;
-    justify-self: start;
   }
 }
 
@@ -1806,16 +1858,20 @@ h2 {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .recurring-form .field:first-child,
-  .linked-debt-field,
-  .recurring-form .btn,
-  .recurring-form-actions {
-    grid-column: 1 / -1;
+  .schedule-editor-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .recurring-form-actions {
-    flex-direction: column;
-    align-items: stretch;
+  .schedule-editor-grid .schedule-field-wide {
+    grid-column: auto;
+  }
+
+  .schedule-editor-actions {
+    justify-content: stretch;
+  }
+
+  .schedule-editor-actions .btn {
+    flex: 1;
   }
 }
 
@@ -4620,26 +4676,6 @@ h2 {
 :root[data-theme='dark'] .cycle-spend-card {
   background: rgba(130, 201, 174, 0.06);
   border-color: rgba(130, 201, 174, 0.15);
-}
-
-:root[data-theme='dark'] .editing-banner {
-  background: rgba(99, 102, 241, 0.16);
-  border-color: rgba(99, 102, 241, 0.4);
-  color: #a5b4fc;
-}
-
-:root[data-theme='dark'] .schedule-list li.schedule-item-editing {
-  background: rgba(99, 102, 241, 0.12);
-  outline-color: rgba(99, 102, 241, 0.45);
-}
-
-:root[data-theme='dark'] .recurring-edit-notice {
-  background: rgba(99, 102, 241, 0.15);
-  border-color: rgba(99, 102, 241, 0.35);
-}
-
-:root[data-theme='dark'] .recurring-edit-notice label {
-  color: #a5b4fc;
 }
 
 /* DEBT TRACKER */
