@@ -3,6 +3,7 @@ import ModalSheet from '../components/ModalSheet.jsx'
 import { parseImportedJson } from '../utils/storage.js'
 import { formatINR, formatMonthLabel, parseAmount, createId } from '../utils/formatting.js'
 import { getStoredGeminiKey, saveStoredGeminiKey } from '../utils/geminiScanner.js'
+import { guessLoanAmount } from '../utils/debts.js'
 
 export default function Settings({
   data,
@@ -19,6 +20,7 @@ export default function Settings({
   onAddRecurring,
   onUpdateRecurring,
   onDeleteRecurring,
+  onSaveDebt,
   onAddAccount,
   onDeleteAccount,
   onSetDefaultAccount,
@@ -44,6 +46,9 @@ export default function Settings({
   const [scheduleInstallments, setScheduleInstallments] = useState('')
   const [scheduleAccountId, setScheduleAccountId] = useState(() => data.accounts?.find((a) => a.isDefault)?.id || '')
   const [scheduleDebtId, setScheduleDebtId] = useState('')
+  const [autoDebtAmount, setAutoDebtAmount] = useState('')
+  const [autoDebtBalance, setAutoDebtBalance] = useState('')
+  const [autoDebtRate, setAutoDebtRate] = useState('')
 
   // Account form state
   const [accName, setAccName] = useState('')
@@ -190,7 +195,23 @@ export default function Settings({
     setScheduleKind(schedule.kind || 'monthly')
     setScheduleInstallments(schedule.installments ? String(schedule.installments) : '')
     setScheduleAccountId(schedule.accountId || '')
-    setScheduleDebtId(schedule.debtId || '')
+
+    // Auto-match existing debt by name if not already linked
+    let initialDebtId = schedule.debtId || ''
+    if (schedule.kind === 'emi' && !initialDebtId) {
+      const match = (data.debts || []).find((d) =>
+        d.status !== 'paid' && d.balance > 0 && d.kind !== 'credit_card' &&
+        d.name.trim().toLowerCase() === (schedule.name || '').trim().toLowerCase() &&
+        !(data.recurringExpenses || []).some((s) => s.id !== schedule.id && s.debtId === d.id)
+      )
+      if (match) initialDebtId = match.id
+    }
+    setScheduleDebtId(initialDebtId)
+
+    const guessed = guessLoanAmount(schedule.name, schedule.amount, schedule.installments)
+    setAutoDebtAmount(guessed ? String(guessed) : '')
+    setAutoDebtBalance(guessed ? String(guessed) : '')
+    setAutoDebtRate('')
     setFeedback({ section: '', error: '', message: '', field: '' })
     setScheduleEditorOpen(true)
   }
@@ -205,6 +226,9 @@ export default function Settings({
     setScheduleInstallments('')
     setScheduleAccountId(data.accounts?.find((a) => a.isDefault)?.id || '')
     setScheduleDebtId('')
+    setAutoDebtAmount('')
+    setAutoDebtBalance('')
+    setAutoDebtRate('')
     setFeedback({ section: '', error: '', message: '', field: '' })
     setScheduleEditorOpen(true)
   }
@@ -220,6 +244,9 @@ export default function Settings({
     setScheduleInstallments('')
     setScheduleAccountId(data.accounts?.find((a) => a.isDefault)?.id || '')
     setScheduleDebtId('')
+    setAutoDebtAmount('')
+    setAutoDebtBalance('')
+    setAutoDebtRate('')
     setFeedback({ section: '', error: '', message: '', field: '' })
   }
 
@@ -248,7 +275,52 @@ export default function Settings({
       reportError('schedule', 'Enter the number of EMI installments.', 'installments')
       return
     }
-    if (scheduleKind === 'emi' && scheduleDebtId && (data.recurringExpenses || []).some((schedule) =>
+
+    let finalDebtId = scheduleKind === 'emi' ? scheduleDebtId || null : null
+    let newDebtRecord = null
+
+    if (scheduleKind === 'emi' && scheduleDebtId === '__auto_create__') {
+      const parsedOriginal = parseAmount(autoDebtAmount)
+      const guessed = guessLoanAmount(scheduleName, amount, installments)
+      const originalAmount = (Number.isFinite(parsedOriginal) && parsedOriginal > 0)
+        ? parsedOriginal
+        : (guessed > 0 ? guessed : Math.round(amount * installments))
+
+      if (!originalAmount || originalAmount <= 0) {
+        reportError('schedule', 'Enter a valid loan amount.', 'debt')
+        return
+      }
+
+      const parsedBalance = parseAmount(autoDebtBalance)
+      const balance = (Number.isFinite(parsedBalance) && parsedBalance >= 0)
+        ? parsedBalance
+        : originalAmount
+
+      const rate = autoDebtRate ? parseAmount(autoDebtRate) : null
+      const newDebtId = createId()
+      const nextDueDay = Math.min(day, 28)
+
+      newDebtRecord = {
+        id: newDebtId,
+        kind: 'loan',
+        category: scheduleCategory || 'EMI',
+        name: scheduleName.trim(),
+        lender: scheduleAccountId ? (data.accounts?.find((a) => a.id === scheduleAccountId)?.name || '') : '',
+        originalAmount,
+        balance,
+        rate: Number.isFinite(rate) ? rate : null,
+        monthlyRate: Number.isFinite(rate) ? Math.round((rate / 12) * 1000) / 1000 : null,
+        emi: amount,
+        totalMonths: installments,
+        monthsRemaining: installments,
+        nextDue: `${month}-${String(nextDueDay).padStart(2, '0')}`,
+        status: balance <= 0 ? 'paid' : 'active',
+      }
+      finalDebtId = newDebtId
+      if (onSaveDebt) {
+        onSaveDebt(newDebtRecord)
+      }
+    } else if (scheduleKind === 'emi' && scheduleDebtId && (data.recurringExpenses || []).some((schedule) =>
       schedule.id !== editingScheduleId && schedule.debtId === scheduleDebtId
     )) {
       reportError('schedule', 'That debt is already linked to another EMI schedule.', 'debt')
@@ -269,11 +341,11 @@ export default function Settings({
           kind: scheduleKind,
           installments: scheduleKind === 'emi' ? installments : null,
           accountId: scheduleAccountId || null,
-          debtId: scheduleKind === 'emi' ? scheduleDebtId || null : null,
-        })
+          debtId: finalDebtId,
+        }, newDebtRecord)
       }
       handleCancelEditRecurring()
-      reportMessage('schedule', 'Recurring schedule updated.')
+      reportMessage('schedule', newDebtRecord ? 'Recurring schedule updated and debt created in Debt Tracker.' : 'Recurring schedule updated.')
     } else {
       onAddRecurring({
         id: createId(),
@@ -286,13 +358,16 @@ export default function Settings({
         kind: scheduleKind,
         installments: scheduleKind === 'emi' ? installments : null,
         accountId: scheduleAccountId || null,
-        debtId: scheduleKind === 'emi' ? scheduleDebtId || null : null,
-      })
+        debtId: finalDebtId,
+      }, newDebtRecord)
       setScheduleName('')
       setScheduleAmount('')
       setScheduleInstallments('')
       setScheduleDebtId('')
-      reportMessage('schedule', 'Recurring schedule added.')
+      setAutoDebtAmount('')
+      setAutoDebtBalance('')
+      setAutoDebtRate('')
+      reportMessage('schedule', newDebtRecord ? 'Recurring schedule added and debt created in Debt Tracker.' : 'Recurring schedule added.')
     }
   }
 
@@ -615,7 +690,26 @@ export default function Settings({
                 <div className="schedule-editor-grid">
                   <label className="field">
                     <span>Number of installments</span>
-                    <input ref={(element) => { scheduleFields.current.installments = element }} type="number" min="1" value={scheduleInstallments} required aria-invalid={feedback.section === 'schedule' && feedback.field === 'installments'} aria-describedby={feedback.section === 'schedule' && feedback.field === 'installments' ? 'schedule-error' : undefined} onChange={(event) => setScheduleInstallments(event.target.value)} placeholder="24" />
+                    <input
+                      ref={(element) => { scheduleFields.current.installments = element }}
+                      type="number"
+                      min="1"
+                      value={scheduleInstallments}
+                      required
+                      aria-invalid={feedback.section === 'schedule' && feedback.field === 'installments'}
+                      aria-describedby={feedback.section === 'schedule' && feedback.field === 'installments' ? 'schedule-error' : undefined}
+                      onChange={(event) => {
+                        setScheduleInstallments(event.target.value)
+                        if (scheduleDebtId === '__auto_create__' && !autoDebtAmount) {
+                          const guessed = guessLoanAmount(scheduleName, scheduleAmount, event.target.value)
+                          if (guessed) {
+                            setAutoDebtAmount(String(guessed))
+                            setAutoDebtBalance(String(guessed))
+                          }
+                        }
+                      }}
+                      placeholder="24"
+                    />
                   </label>
                   <label className="field">
                     <span>Debt to track (optional)</span>
@@ -624,27 +718,102 @@ export default function Settings({
                       value={scheduleDebtId}
                       aria-invalid={feedback.section === 'schedule' && feedback.field === 'debt'}
                       aria-describedby={feedback.section === 'schedule' && feedback.field === 'debt' ? 'schedule-error' : 'schedule-debt-help'}
-                      onChange={(event) => setScheduleDebtId(event.target.value)}
+                      onChange={(event) => {
+                        const val = event.target.value
+                        setScheduleDebtId(val)
+                        if (val === '__auto_create__' && !autoDebtAmount) {
+                          const guessed = guessLoanAmount(scheduleName, scheduleAmount, scheduleInstallments)
+                          if (guessed) {
+                            setAutoDebtAmount(String(guessed))
+                            setAutoDebtBalance(String(guessed))
+                          }
+                        }
+                      }}
                     >
                       <option value="">Do not track a debt</option>
+                      <option value="__auto_create__">✨ Automatically create &amp; link in Debt Tracker</option>
                       {availableDebts.map((debt) => (
                         <option key={debt.id} value={debt.id}>{debt.name} ({formatINR(debt.balance)} remaining)</option>
                       ))}
                     </select>
                   </label>
                 </div>
-                {selectedDebt ? (
+
+                {scheduleDebtId === '__auto_create__' ? (
+                  <div className="schedule-debt-autocreate">
+                    <div className="schedule-debt-autocreate-header">
+                      <strong>✨ Automatically create and link in Debt Tracker</strong>
+                      <span>A new loan will be added to your Debt Tracker with this EMI</span>
+                    </div>
+                    <div className="schedule-editor-grid">
+                      <label className="field">
+                        <span>Total loan amount (Principal)</span>
+                        <input
+                          type="number"
+                          min="1"
+                          value={autoDebtAmount}
+                          required
+                          onChange={(e) => setAutoDebtAmount(e.target.value)}
+                          placeholder={String(guessLoanAmount(scheduleName, scheduleAmount, scheduleInstallments) || '1200000')}
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Remaining balance</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={autoDebtBalance || autoDebtAmount}
+                          required
+                          onChange={(e) => setAutoDebtBalance(e.target.value)}
+                          placeholder={String(autoDebtAmount || '1200000')}
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Annual interest rate % (optional)</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={autoDebtRate}
+                          onChange={(e) => setAutoDebtRate(e.target.value)}
+                          placeholder="e.g. 9.5"
+                        />
+                      </label>
+                    </div>
+                    <p className="schedule-debt-help-text">
+                      Saving will add <strong>"{scheduleName || 'Loan'}"</strong> to the Debt Tracker and connect each monthly {formatINR(parseAmount(scheduleAmount) || 0)} payment automatically.
+                    </p>
+                  </div>
+                ) : selectedDebt ? (
                   <div className="schedule-debt-summary">
                     <strong>{selectedDebt.name}</strong>
                     <span>{formatINR(selectedDebt.balance)} remaining</span>
                     <p id="schedule-debt-help">Each generated EMI is recorded as an expense and as a payment against this debt. Interest uses the debt’s saved rate. Existing payment history is not changed by editing this schedule.</p>
                   </div>
                 ) : (
-                  <p id="schedule-debt-help" className="schedule-debt-help">
-                    {availableDebts.length
-                      ? 'Choose a debt to track its balance alongside this expense. The EMI will still be recorded as an expense if you leave this unlinked.'
-                      : 'No eligible debts are available. Add a debt in Debt Tracker to connect it, or leave this EMI unlinked.'}
-                  </p>
+                  <div id="schedule-debt-help" className="schedule-debt-help">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <span>
+                        {availableDebts.length
+                          ? 'Choose a debt to track its balance alongside this expense. The EMI will still be recorded as an expense if you leave this unlinked.'
+                          : 'No eligible debts are available in Debt Tracker yet.'}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => {
+                          setScheduleDebtId('__auto_create__')
+                          const guessed = guessLoanAmount(scheduleName, scheduleAmount, scheduleInstallments)
+                          if (guessed) {
+                            setAutoDebtAmount(String(guessed))
+                            setAutoDebtBalance(String(guessed))
+                          }
+                        }}
+                      >
+                        ✨ Create &amp; link debt automatically
+                      </button>
+                    </div>
+                  </div>
                 )}
               </section>
             ) : null}

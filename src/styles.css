@@ -1660,6 +1660,48 @@ h2 {
   line-height: 1.45;
 }
 
+.btn-sm {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.78rem;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.schedule-debt-autocreate {
+  margin: 0.5rem 0 0;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--accent, #48bb78);
+  border-radius: 10px;
+  background: var(--sage);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.schedule-debt-autocreate-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.schedule-debt-autocreate-header strong {
+  color: var(--ink);
+  font-size: 0.88rem;
+}
+
+.schedule-debt-autocreate-header span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.schedule-debt-help-text {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+
 .schedule-editor-actions {
   display: flex;
   justify-content: flex-end;

@@ -280,13 +280,17 @@ export function useTrackerData(authReady, authUser, month) {
     if (!normalized) return { ok: false, error: 'Enter a name, original amount, and valid balance.' }
 
     enqueueMutation({ table: 'debts', id, op: 'upsert', payload: normalized })
-    setData((current) => ({
-      ...current,
-      debts: existingId
-        ? (current.debts || []).map((debt) => debt.id === existingId ? normalized : debt)
-        : [normalized, ...(current.debts || [])],
-    }))
-    return { ok: true }
+    setData((current) => {
+      const next = {
+        ...current,
+        debts: existingId
+          ? (current.debts || []).map((debt) => debt.id === existingId ? normalized : debt)
+          : [normalized, ...(current.debts || [])],
+      }
+      dataRef.current = next
+      return next
+    })
+    return { ok: true, id, debt: normalized }
   }, [])
 
   const recordDebtPayment = useCallback((debtId, fields) => {
@@ -311,8 +315,8 @@ export function useTrackerData(authReady, authUser, month) {
     return { ok: true }
   }, [])
 
-  const importDebts = useCallback((text) => {
-    const result = parseDebtImport(text)
+  const importDebts = useCallback((input) => {
+    const result = parseDebtImport(input)
     if (!result.ok) return result
     const currentIds = new Set((dataRef.current?.debts || []).map((debt) => debt.id))
     const additions = result.debts.filter((debt) => !currentIds.has(debt.id))
@@ -586,30 +590,52 @@ export function useTrackerData(authReady, authUser, month) {
     }))
   }, [])
 
-  const addRecurringExpense = useCallback((schedule) => {
+  const addRecurringExpense = useCallback((schedule, newDebt = null) => {
+    let current = dataRef.current
+    if (newDebt) {
+      const normalizedDebt = normalizeDebt(newDebt)
+      if (normalizedDebt) {
+        enqueueMutation({ table: 'debts', id: normalizedDebt.id, op: 'upsert', payload: normalizedDebt })
+        current = {
+          ...current,
+          debts: [normalizedDebt, ...(current.debts || [])],
+        }
+      }
+    }
     enqueueMutation({
       table: 'recurring_schedules',
       id: schedule.id,
       op: 'upsert',
       payload: schedule,
     })
-    const current = dataRef.current
     const withSchedule = {
       ...current,
       recurringExpenses: [...(current.recurringExpenses || []), schedule],
     }
-    setData(materializeRecurringData(withSchedule, monthRef.current))
+    const materialized = materializeRecurringData(withSchedule, monthRef.current, schedule.debtId ? [schedule.id] : [])
+    dataRef.current = materialized
+    setData(materialized)
   }, [])
 
-  const updateRecurringExpense = useCallback((schedule) => {
+  const updateRecurringExpense = useCallback((schedule, newDebt = null) => {
     if (!schedule || !schedule.id) return
+    let current = dataRef.current
+    if (newDebt) {
+      const normalizedDebt = normalizeDebt(newDebt)
+      if (normalizedDebt) {
+        enqueueMutation({ table: 'debts', id: normalizedDebt.id, op: 'upsert', payload: normalizedDebt })
+        current = {
+          ...current,
+          debts: [normalizedDebt, ...(current.debts || [])],
+        }
+      }
+    }
     enqueueMutation({
       table: 'recurring_schedules',
       id: schedule.id,
       op: 'upsert',
       payload: schedule,
     })
-    const current = dataRef.current
     const nextSchedules = (current.recurringExpenses || []).map((item) =>
       item.id === schedule.id ? schedule : item
     )
@@ -634,6 +660,7 @@ export function useTrackerData(authReady, authUser, month) {
       recurringExpenses: nextSchedules,
       expenses: nextExpenses,
     }, currentMonthKey, schedule.debtId ? [schedule.id] : [])
+    dataRef.current = updated
     setData(updated)
   }, [])
 

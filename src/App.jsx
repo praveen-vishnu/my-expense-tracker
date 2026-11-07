@@ -408,6 +408,7 @@ export default function App() {
             onAddRecurring={addRecurringExpense}
             onUpdateRecurring={updateRecurringExpense}
             onDeleteRecurring={handlePromptDeleteRecurring}
+            onSaveDebt={saveDebt}
             onAddAccount={addAccount}
             onDeleteAccount={handlePromptDeleteAccount}
             onSetDefaultAccount={setDefaultAccount}
