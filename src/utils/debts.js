@@ -193,6 +193,52 @@ export function applyDebtPayment(debt, payment) {
   })
 }
 
+/**
+ * Automatically splits a single payment amount into principal, interest, and fees
+ * based on the loan's balance and interest rate.
+ */
+export function calculatePaymentSplit(debt, amount) {
+  const total = Math.max(0, optionalAmount(amount) || 0)
+  if (!debt || total <= 0) return { principal: 0, interest: 0, fees: 0 }
+
+  const balance = Math.max(0, optionalAmount(debt.balance) || 0)
+  const monthlyRate = debt.monthlyRate != null && Number(debt.monthlyRate) > 0
+    ? Number(debt.monthlyRate) / 100
+    : (debt.rate != null && Number(debt.rate) > 0 ? Number(debt.rate) / 1200 : 0)
+
+  if (monthlyRate > 0 && balance > 0) {
+    const estInterest = Math.round(balance * monthlyRate * 100) / 100
+    if (total <= estInterest) {
+      return {
+        principal: 0,
+        interest: total,
+        fees: 0,
+      }
+    }
+    const potentialPrincipal = Math.round((total - estInterest) * 100) / 100
+    if (potentialPrincipal > balance) {
+      return {
+        principal: balance,
+        interest: Math.round((total - balance) * 100) / 100,
+        fees: 0,
+      }
+    }
+    return {
+      principal: potentialPrincipal,
+      interest: estInterest,
+      fees: 0,
+    }
+  }
+
+  const principal = Math.min(balance, total)
+  const excess = Math.round((total - principal) * 100) / 100
+  return {
+    principal,
+    interest: excess,
+    fees: 0,
+  }
+}
+
 /** Map common human-friendly headers to normalizeDebt field names */
 const HEADER_ALIASES = {
   // name

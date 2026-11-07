@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import ModalSheet from '../components/ModalSheet.jsx'
 import { formatINR, formatShortDate, isValidDate, parseAmount, todayISO } from '../utils/formatting.js'
-import { calculateRemainingMonths, parseDebtImport, parseCSV, parseExcel } from '../utils/debts.js'
+import { calculatePaymentSplit, calculateRemainingMonths, parseDebtImport, parseCSV, parseExcel } from '../utils/debts.js'
 
 function blankDebt() {
   return {
@@ -222,36 +222,73 @@ function DebtForm({ initial, onSave, onCancel }) {
 }
 
 function PaymentForm({ debt, linkedSchedule, onSave, onCancel }) {
-  const [principal, setPrincipal] = useState('')
-  const [interest, setInterest] = useState('')
-  const [fees, setFees] = useState('')
+  const regularEmi = debt.emi || linkedSchedule?.amount || (debt.minDue || null)
+  const [amount, setAmount] = useState(regularEmi ? String(regularEmi) : '')
+  const [customSplit, setCustomSplit] = useState(false)
+  const [manualPrincipal, setManualPrincipal] = useState('')
+  const [manualInterest, setManualInterest] = useState('')
+  const [manualFees, setManualFees] = useState('')
   const [date, setDate] = useState(todayISO())
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
-  const principalRef = useRef(null)
-  const principalAmount = parseAmount(principal)
-  const interestAmount = interest === '' ? 0 : parseAmount(interest)
-  const feeAmount = fees === '' ? 0 : parseAmount(fees)
-  const total = [principalAmount, interestAmount, feeAmount].every(Number.isFinite)
-    ? principalAmount + interestAmount + feeAmount
-    : 0
+  const amountRef = useRef(null)
+
+  const parsedAmount = parseAmount(amount)
+  const autoSplit = useMemo(() => calculatePaymentSplit(debt, parsedAmount), [debt, parsedAmount])
+
+  const principalAmount = customSplit ? parseAmount(manualPrincipal) : autoSplit.principal
+  const interestAmount = customSplit ? (manualInterest === '' ? 0 : parseAmount(manualInterest)) : autoSplit.interest
+  const feeAmount = customSplit ? (manualFees === '' ? 0 : parseAmount(manualFees)) : autoSplit.fees
+
+  const total = customSplit
+    ? [principalAmount, interestAmount, feeAmount].every(Number.isFinite)
+      ? Math.round((principalAmount + interestAmount + feeAmount) * 100) / 100
+      : 0
+    : (Number.isFinite(parsedAmount) && parsedAmount > 0 ? parsedAmount : 0)
+
+  const newBalance = Math.max(0, Math.round((debt.balance - (principalAmount || 0)) * 100) / 100)
+
+  function toggleCustomSplit() {
+    if (!customSplit) {
+      setManualPrincipal(String(autoSplit.principal ?? ''))
+      setManualInterest(String(autoSplit.interest ?? ''))
+      setManualFees(String(autoSplit.fees ?? ''))
+      setCustomSplit(true)
+    } else {
+      setCustomSplit(false)
+    }
+  }
+
+  function handleSetAmount(val) {
+    setAmount(String(val))
+    if (customSplit) {
+      const nextSplit = calculatePaymentSplit(debt, val)
+      setManualPrincipal(String(nextSplit.principal ?? ''))
+      setManualInterest(String(nextSplit.interest ?? ''))
+      setManualFees(String(nextSplit.fees ?? ''))
+    }
+  }
 
   function submit(event) {
     event.preventDefault()
-    if (!Number.isFinite(principalAmount) || principalAmount < 0 || !Number.isFinite(interestAmount) || interestAmount < 0 || !Number.isFinite(feeAmount) || feeAmount < 0 || total <= 0) {
-      setError('Enter a positive payment amount split between principal, interest, and fees.')
-      principalRef.current?.focus()
+    if (!Number.isFinite(total) || total <= 0) {
+      setError('Please enter a payment amount greater than ₹0.')
+      amountRef.current?.focus()
+      return
+    }
+    if (!Number.isFinite(principalAmount) || principalAmount < 0 || !Number.isFinite(interestAmount) || interestAmount < 0 || !Number.isFinite(feeAmount) || feeAmount < 0) {
+      setError('Please enter valid positive numbers for the payment breakdown.')
       return
     }
     if (principalAmount > debt.balance) {
-      setError('Principal paid cannot be more than the remaining balance.')
-      principalRef.current?.focus()
+      setError(`Principal paid (${formatINR(principalAmount)}) cannot exceed the remaining balance (${formatINR(debt.balance)}).`)
       return
     }
     if (!isValidDate(date)) {
       setError('Choose a valid payment date.')
       return
     }
+
     const result = onSave(debt.id, {
       amount: total,
       principal: principalAmount,
@@ -268,46 +305,169 @@ function PaymentForm({ debt, linkedSchedule, onSave, onCancel }) {
   }
 
   return (
-    <ModalSheet titleId="debt-payment-title" initialFocusRef={principalRef} onDismiss={onCancel} className="debt-sheet">
+    <ModalSheet titleId="debt-payment-title" initialFocusRef={amountRef} onDismiss={onCancel} className="debt-sheet">
       <form className="sheet-form" noValidate onSubmit={submit}>
         <div className="sheet-head">
           <div>
             <span className="debt-eyebrow">Payment entry · {debt.name}</span>
-            <h2 id="debt-payment-title">{linkedSchedule ? 'Record an extra payment' : 'Record a payment'}</h2>
+            <h2 id="debt-payment-title">{linkedSchedule ? 'Record extra payment' : 'Record a payment'}</h2>
           </div>
           <button type="button" className="text-btn" onClick={onCancel}>Close</button>
         </div>
+
         {linkedSchedule ? (
-          <p className="debt-payment-balance">
-            The scheduled EMI updates this debt automatically when its current-month expense is generated. Use this form only for additional payments.
+          <p className="debt-payment-balance" style={{ fontSize: '0.8rem' }}>
+            ℹ️ Your monthly EMI is linked. Use this form to record an extra payment or manual settlement.
           </p>
         ) : null}
-        <p className="debt-payment-balance">Remaining principal <strong>{formatINR(debt.balance)}</strong></p>
+
+        <div className="debt-payment-balance">
+          <span>Remaining principal</span>
+          <strong>{formatINR(debt.balance)}</strong>
+        </div>
+
+        {/* Primary Amount Input */}
+        <label className="field debt-field-wide">
+          <span style={{ fontSize: '0.92rem', fontWeight: 600 }}>Payment amount (₹)</span>
+          <input
+            ref={amountRef}
+            type="number"
+            min="0.01"
+            step="0.01"
+            value={amount}
+            onChange={(e) => handleSetAmount(e.target.value)}
+            placeholder={regularEmi ? `Regular EMI: ${regularEmi}` : 'Enter payment amount'}
+            style={{ fontSize: '1.25rem', fontWeight: 700, padding: '0.65rem 0.85rem' }}
+          />
+        </label>
+
+        {/* Quick action chips */}
+        <div style={{ display: 'flex', gap: '0.45rem', flexWrap: 'wrap', marginTop: '-0.3rem' }}>
+          {regularEmi ? (
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => handleSetAmount(regularEmi)}
+              style={{ fontSize: '0.78rem' }}
+            >
+              ⚡ Regular EMI: {formatINR(regularEmi)}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => handleSetAmount(debt.balance)}
+            style={{ fontSize: '0.78rem' }}
+          >
+            🎯 Pay full balance: {formatINR(debt.balance)}
+          </button>
+        </div>
+
+        {/* Automatic Breakdown Preview Card */}
+        {!customSplit && (parsedAmount > 0) ? (
+          <div style={{
+            background: 'var(--sage)',
+            padding: '0.85rem 1rem',
+            borderRadius: '10px',
+            border: '1px solid rgba(72,187,120,0.3)',
+            margin: '0.3rem 0'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+              <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--ink)' }}>
+                📊 How this payment is applied
+              </span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--pine)', fontWeight: 600 }}>
+                ✓ Auto-calculated
+              </span>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem' }}>
+              <div>
+                <small style={{ color: 'var(--muted)', fontSize: '0.74rem', display: 'block' }}>Principal (reduces balance)</small>
+                <strong style={{ fontSize: '0.98rem', color: 'var(--ink)', fontFamily: 'var(--mono)' }}>{formatINR(autoSplit.principal)}</strong>
+                <span style={{ fontSize: '0.72rem', color: 'var(--muted)', display: 'block', marginTop: '0.15rem' }}>
+                  New balance: {formatINR(newBalance)}
+                </span>
+              </div>
+              <div>
+                <small style={{ color: 'var(--muted)', fontSize: '0.74rem', display: 'block' }}>Interest portion</small>
+                <strong style={{ fontSize: '0.98rem', color: 'var(--ink)', fontFamily: 'var(--mono)' }}>{formatINR(autoSplit.interest)}</strong>
+                <span style={{ fontSize: '0.72rem', color: 'var(--muted)', display: 'block', marginTop: '0.15rem' }}>
+                  {debt.monthlyRate ? `${debt.monthlyRate}%/mo rate` : (debt.rate ? `${debt.rate}% annual rate` : '0% interest')}
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Custom Split Toggle & Inputs */}
+        <div style={{ margin: '0.2rem 0' }}>
+          <button
+            type="button"
+            className="text-btn"
+            onClick={toggleCustomSplit}
+            style={{ fontSize: '0.78rem', color: 'var(--pine)', cursor: 'pointer' }}
+          >
+            {customSplit ? '↺ Use automatic split instead' : '✏️ Need custom split? Adjust principal, interest & fees manually'}
+          </button>
+        </div>
+
+        {customSplit ? (
+          <div className="debt-form-grid" style={{ background: 'rgba(0,0,0,0.04)', padding: '0.8rem', borderRadius: '8px' }}>
+            <label className="field">
+              <span>Principal paid</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={manualPrincipal}
+                onChange={(e) => setManualPrincipal(e.target.value)}
+                placeholder="0"
+              />
+            </label>
+            <label className="field">
+              <span>Interest paid</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={manualInterest}
+                onChange={(e) => setManualInterest(e.target.value)}
+                placeholder="0"
+              />
+            </label>
+            <label className="field">
+              <span>Fees</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={manualFees}
+                onChange={(e) => setManualFees(e.target.value)}
+                placeholder="0"
+              />
+            </label>
+          </div>
+        ) : null}
+
         <div className="debt-form-grid">
-          <label className="field">
-            <span>Principal paid</span>
-            <input ref={principalRef} type="number" min="0" step="0.01" value={principal} onChange={(event) => setPrincipal(event.target.value)} placeholder="0" />
-          </label>
-          <label className="field">
-            <span>Interest paid</span>
-            <input type="number" min="0" step="0.01" value={interest} onChange={(event) => setInterest(event.target.value)} placeholder="0" />
-          </label>
-          <label className="field">
-            <span>Fees</span>
-            <input type="number" min="0" step="0.01" value={fees} onChange={(event) => setFees(event.target.value)} placeholder="0" />
-          </label>
           <label className="field">
             <span>Payment date</span>
             <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
           </label>
-          <label className="field debt-field-wide">
+          <label className="field">
             <span>Note</span>
-            <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Optional" />
+            <input value={note} onChange={(event) => setNote(event.target.value)} placeholder="e.g. Regular EMI, Part prepayment (optional)" />
           </label>
         </div>
-        <div className="debt-payment-total"><span>Total payment</span><strong>{formatINR(total)}</strong></div>
-        <p className="debt-form-hint">Only the principal portion reduces your outstanding balance.</p>
+
+        <div className="debt-payment-total">
+          <span>Total payment</span>
+          <strong>{formatINR(total)}</strong>
+        </div>
+
         {error ? <p className="debt-form-error" role="alert">{error}</p> : null}
+
         <div className="debt-form-actions">
           <button type="button" className="btn btn-secondary" onClick={onCancel}>Cancel</button>
           <button type="submit" className="btn btn-primary">Save payment</button>

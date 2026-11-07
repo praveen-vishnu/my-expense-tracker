@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { normalizeData } from './storage.js'
-import { applyDebtPayment, calculateRemainingMonths, guessLoanAmount, normalizeDebt, normalizeDebtPayment, parseCSV, parseDebtImport } from './debts.js'
+import { applyDebtPayment, calculatePaymentSplit, calculateRemainingMonths, guessLoanAmount, normalizeDebt, normalizeDebtPayment, parseCSV, parseDebtImport } from './debts.js'
 
 test('normalizes legacy debt exports and retains informal-loan balances and monthly rates', () => {
   const debt = normalizeDebt({
@@ -197,6 +197,39 @@ Personal Loan,HDFC,500000,420000,15200,12.5,36,2025-01-10,2026-12-05`
   assert.equal(imported.debts[0].name, 'Home Loan')
   assert.equal(imported.debts[0].originalAmount, 2500000)
   assert.equal(imported.debts[0].balance, 2100000)
+})
+
+test('calculatePaymentSplit auto-splits payment amount into principal and interest', () => {
+  // Rohit Loan 1: Balance 279292, Rate 20%, Payment 15270
+  // Monthly rate = 20 / 1200 = 1/60
+  // Interest = round(279292 * 1/60 * 100) / 100 = 4654.87
+  // Principal = 15270 - 4654.87 = 10615.13
+  const split = calculatePaymentSplit({
+    balance: 279292,
+    rate: 20,
+  }, 15270)
+
+  assert.equal(split.interest, 4654.87)
+  assert.equal(split.principal, 10615.13)
+  assert.equal(split.fees, 0)
+  assert.equal(Math.round((split.principal + split.interest) * 100) / 100, 15270)
+
+  // 0% interest loan: 100% to principal
+  const zeroInterestSplit = calculatePaymentSplit({
+    balance: 135000,
+    rate: 0,
+  }, 5000)
+  assert.equal(zeroInterestSplit.principal, 5000)
+  assert.equal(zeroInterestSplit.interest, 0)
+  assert.equal(zeroInterestSplit.fees, 0)
+
+  // Payment smaller than monthly interest: all goes to interest
+  const smallPayment = calculatePaymentSplit({
+    balance: 100000,
+    rate: 12, // 1000/mo interest
+  }, 500)
+  assert.equal(smallPayment.interest, 500)
+  assert.equal(smallPayment.principal, 0)
 })
 
 
