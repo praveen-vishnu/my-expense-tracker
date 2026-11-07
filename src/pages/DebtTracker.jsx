@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import ModalSheet from '../components/ModalSheet.jsx'
 import { formatINR, formatShortDate, isValidDate, parseAmount, todayISO } from '../utils/formatting.js'
+import { calculateRemainingMonths, parseDebtImport, parseCSV, parseExcel } from '../utils/debts.js'
 
 function blankDebt() {
   return {
@@ -60,6 +61,22 @@ function DebtForm({ initial, onSave, onCancel }) {
 
     const amountField = (value) => value === '' ? null : parseAmount(value)
     const integerField = (value) => value === '' ? null : Number(value)
+    const explicitMonths = integerField(values.monthsRemaining)
+    const totalMonths = integerField(values.totalMonths)
+    const calculatedMonths = calculateRemainingMonths({
+      ...values,
+      balance,
+      originalAmount,
+      totalMonths,
+      loanTakenDate: values.loanTakenDate || null,
+      emi: amountField(values.emi),
+      rate: amountField(values.rate),
+      monthlyRate: amountField(values.monthlyRate),
+      nextDue: values.nextDue || null,
+      monthsRemaining: explicitMonths,
+    })
+    const monthsRemaining = explicitMonths != null ? explicitMonths : calculatedMonths
+
     const result = onSave({
       ...(initial?.id ? { id: initial.id } : {}),
       ...values,
@@ -68,8 +85,8 @@ function DebtForm({ initial, onSave, onCancel }) {
       rate: amountField(values.rate),
       monthlyRate: amountField(values.monthlyRate),
       emi: amountField(values.emi),
-      monthsRemaining: integerField(values.monthsRemaining),
-      totalMonths: integerField(values.totalMonths),
+      monthsRemaining,
+      totalMonths,
       nextDue: values.nextDue || null,
       loanTakenDate: values.loanTakenDate || null,
       principalPaid: initial?.principalPaid,
@@ -140,12 +157,58 @@ function DebtForm({ initial, onSave, onCancel }) {
             <input type="date" value={values.nextDue} onChange={(event) => update('nextDue', event.target.value)} />
           </label>
           <label className="field">
-            <span>Months remaining</span>
-            <input type="number" min="0" step="1" value={values.monthsRemaining} onChange={(event) => update('monthsRemaining', event.target.value)} placeholder="Optional" />
+            <span>Original start date</span>
+            <input
+              type="date"
+              value={values.loanTakenDate}
+              onChange={(event) => {
+                const startDate = event.target.value
+                update('loanTakenDate', startDate)
+                if (startDate && values.totalMonths) {
+                  const autoMonths = calculateRemainingMonths({
+                    ...values,
+                    loanTakenDate: startDate,
+                  })
+                  if (autoMonths != null) {
+                    update('monthsRemaining', String(autoMonths))
+                  }
+                }
+              }}
+            />
           </label>
           <label className="field">
-            <span>Original start date</span>
-            <input type="date" value={values.loanTakenDate} onChange={(event) => update('loanTakenDate', event.target.value)} />
+            <span>Total tenure (months)</span>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              value={values.totalMonths}
+              onChange={(event) => {
+                const total = event.target.value
+                update('totalMonths', total)
+                if (total && values.loanTakenDate) {
+                  const autoMonths = calculateRemainingMonths({
+                    ...values,
+                    totalMonths: total,
+                  })
+                  if (autoMonths != null) {
+                    update('monthsRemaining', String(autoMonths))
+                  }
+                }
+              }}
+              placeholder="e.g. 60"
+            />
+          </label>
+          <label className="field">
+            <span>Months remaining</span>
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={values.monthsRemaining}
+              onChange={(event) => update('monthsRemaining', event.target.value)}
+              placeholder="Auto-calculated from date"
+            />
           </label>
         </div>
         {error ? <p className="debt-form-error" role="alert">{error}</p> : null}
@@ -268,6 +331,421 @@ function monthlyObligation(debt) {
   return 0
 }
 
+function DebtImportPreviewModal({ items, onConfirm, onCancel, today }) {
+  const [debts, setDebts] = useState(items)
+
+  const selectedDebts = debts.filter((d) => d.selected)
+  const newCount = debts.filter((d) => !d.isDuplicate).length
+  const duplicateCount = debts.filter((d) => d.isDuplicate).length
+  const totalBalance = selectedDebts.reduce((sum, d) => sum + (d.balance || 0), 0)
+  const allSelected = debts.length > 0 && debts.every((d) => d.selected)
+
+  function toggleAll(checked) {
+    setDebts((prev) => prev.map((d) => ({ ...d, selected: checked })))
+  }
+
+  function toggleItem(id) {
+    setDebts((prev) => prev.map((d) => (d.id === id ? { ...d, selected: !d.selected } : d)))
+  }
+
+  return (
+    <ModalSheet titleId="debt-import-title" onDismiss={onCancel} className="sheet-wide debt-sheet">
+      <div className="debt-import-preview-shell">
+        <div className="sheet-head">
+          <div>
+            <span className="debt-eyebrow">Import preview</span>
+            <h2 id="debt-import-title">Review debts before writing to database</h2>
+            <p className="muted" style={{ margin: '0.2rem 0 0', fontSize: '0.85rem' }}>
+              Verify liability details, balances, and choose which debts to import.
+            </p>
+          </div>
+          <button type="button" className="text-btn" onClick={onCancel}>Close</button>
+        </div>
+
+        <div className="import-summary-bar" style={{ margin: '1rem 0' }}>
+          <div>
+            <strong>{debts.length}</strong> <small style={{ color: 'var(--muted)' }}>debts in file</small>
+          </div>
+          <div>
+            <span style={{ background: 'rgba(72,187,120,0.15)', color: '#276749', padding: '0.2rem 0.55rem', borderRadius: '6px', fontWeight: 600, fontSize: '0.82rem' }}>
+              {newCount} new
+            </span>
+          </div>
+          {duplicateCount > 0 ? (
+            <div>
+              <span style={{ background: 'rgba(237,137,54,0.15)', color: '#c05621', padding: '0.2rem 0.55rem', borderRadius: '6px', fontWeight: 600, fontSize: '0.82rem' }}>
+                {duplicateCount} already in tracker
+              </span>
+            </div>
+          ) : null}
+          <div>
+            <small style={{ color: 'var(--muted)' }}>Selected balance to import:</small> <strong>{formatINR(totalBalance)}</strong>
+          </div>
+        </div>
+
+        <div className="import-table-container">
+          <table className="import-table">
+            <thead>
+              <tr>
+                <th style={{ width: '40px', textAlign: 'center' }}>
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    aria-label="Select all debts"
+                    onChange={(e) => toggleAll(e.target.checked)}
+                  />
+                </th>
+                <th>Debt name &amp; lender</th>
+                <th>Category</th>
+                <th>Current balance</th>
+                <th>Monthly EMI</th>
+                <th>Interest rate</th>
+                <th>Remaining</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {debts.map((item) => {
+                const months = calculateRemainingMonths(item, today)
+                return (
+                  <tr key={item.id} className={!item.selected ? 'row-dimmed' : ''}>
+                    <td style={{ textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={item.selected}
+                        aria-label={`Select ${item.name}`}
+                        onChange={() => toggleItem(item.id)}
+                      />
+                    </td>
+                    <td>
+                      <strong>{item.name}</strong>
+                      {item.lender ? <div style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>{item.lender}</div> : null}
+                    </td>
+                    <td>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>{item.category || item.kind}</span>
+                    </td>
+                    <td>
+                      <strong>{formatINR(item.balance)}</strong>
+                      <div style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>Orig: {formatINR(item.originalAmount)}</div>
+                    </td>
+                    <td>
+                      {item.emi ? formatINR(item.emi) : '—'}
+                    </td>
+                    <td style={{ fontSize: '0.8rem' }}>
+                      {item.monthlyRate != null ? `${item.monthlyRate}%/mo` : (item.rate != null ? `${item.rate}% p.a.` : '—')}
+                    </td>
+                    <td style={{ fontSize: '0.8rem' }}>
+                      {months != null ? `${months} mo` : '—'}
+                    </td>
+                    <td>
+                      {item.isDuplicate ? (
+                        <span style={{ fontSize: '0.74rem', padding: '0.2rem 0.45rem', borderRadius: '4px', background: 'rgba(237,137,54,0.15)', color: '#c05621', fontWeight: 600 }}>
+                          Existing
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: '0.74rem', padding: '0.2rem 0.45rem', borderRadius: '4px', background: 'rgba(72,187,120,0.15)', color: '#276749', fontWeight: 600 }}>
+                          New
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="debt-form-actions" style={{ marginTop: '1.2rem', display: 'flex', justifyContent: 'flex-end', gap: '0.6rem' }}>
+          <button type="button" className="btn btn-secondary" onClick={onCancel}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={selectedDebts.length === 0}
+            onClick={() => onConfirm(selectedDebts)}
+          >
+            Import {selectedDebts.length} {selectedDebts.length === 1 ? 'Debt' : 'Debts'} into Tracker
+          </button>
+        </div>
+      </div>
+    </ModalSheet>
+  )
+}
+
+function DebtImportModal({ onDismiss, onFileParsed, existingDebts = [] }) {
+  const [dragging, setDragging] = useState(false)
+  const [error, setError] = useState('')
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const localFileRef = useRef(null)
+
+  const sampleCsv = [
+    'Name,Lender,Loan Amount,Balance,EMI,Interest Rate,Tenure,Start Date,Due Date',
+    'Home Loan,SBI Bank,2500000,2100000,22000,8.5,240,2024-03-15,2026-12-05',
+    'Personal Loan,HDFC Bank,500000,420000,15200,12.5,36,2025-01-10,2026-12-05',
+    'Credit Card,ICICI Bank,60000,40000,10500,18,6,2026-06-01,2026-12-01',
+  ].join('\n')
+
+  const sampleJson = JSON.stringify([
+    {
+      "id": "loan-1",
+      "name": "Personal Loan",
+      "lender": "HDFC Bank",
+      "originalAmount": 500000,
+      "balance": 420000,
+      "emi": 15200,
+      "rate": 12.5,
+      "loanTakenDate": "2025-01-10",
+      "totalMonths": 36,
+      "nextDue": "2026-12-05"
+    }
+  ], null, 2)
+
+  function downloadTemplate(type) {
+    if (type === 'csv') {
+      const blob = new Blob([sampleCsv], { type: 'text/csv' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'debt_template.csv'
+      link.click()
+      URL.revokeObjectURL(url)
+    } else if (type === 'excel') {
+      import('xlsx').then((mod) => {
+        const XLSX = mod.default || mod
+        const rows = sampleCsv.split('\n').map((r) => r.split(','))
+        const ws = XLSX.utils.aoa_to_sheet(rows)
+        const wb = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(wb, ws, 'Debts')
+        XLSX.writeFile(wb, 'debt_template.xlsx')
+      })
+    } else {
+      const blob = new Blob([sampleJson], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'debt_template.json'
+      link.click()
+      URL.revokeObjectURL(url)
+    }
+  }
+
+  async function processFile(file) {
+    setError('')
+    const ext = file.name.split('.').pop().toLowerCase()
+    const today = todayISO()
+    const existingIds = new Set(existingDebts.map((d) => d.id))
+
+    try {
+      let result
+
+      if (ext === 'csv') {
+        const text = await file.text()
+        const rows = parseCSV(text)
+        if (!rows.length) {
+          setError('We couldn\'t read any loans from this CSV. Please check that the first row has column names like "Name", "Loan Amount", "Balance", etc.')
+          return
+        }
+        result = parseDebtImport(rows)
+      } else if (ext === 'xlsx' || ext === 'xls') {
+        const buffer = await file.arrayBuffer()
+        const rows = await parseExcel(buffer)
+        if (!rows.length) {
+          setError('We couldn\'t read any loans from this spreadsheet. Please check that the first row has column names like "Name", "Loan Amount", "Balance", etc.')
+          return
+        }
+        result = parseDebtImport(rows)
+      } else {
+        const text = await file.text()
+        result = parseDebtImport(text)
+      }
+
+      if (!result.ok) {
+        setError(result.error || 'We couldn\'t understand this file. Please try using one of the templates above.')
+        return
+      }
+
+      const previewList = result.debts.map((d) => {
+        const autoMonths = calculateRemainingMonths(d, today)
+        return {
+          ...d,
+          monthsRemaining: autoMonths != null ? autoMonths : d.monthsRemaining,
+          isDuplicate: existingIds.has(d.id),
+          selected: !existingIds.has(d.id),
+        }
+      })
+      onFileParsed(previewList)
+    } catch (err) {
+      console.error('Import parse error:', err)
+      setError('Something went wrong reading that file. Please make sure it\'s a valid .csv, .xlsx, or .json file.')
+    }
+  }
+
+  function handleFileChange(event) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (file) processFile(file)
+  }
+
+  function handleDrop(event) {
+    event.preventDefault()
+    setDragging(false)
+    const file = event.dataTransfer?.files?.[0]
+    if (file) processFile(file)
+  }
+
+  function handleDragOver(event) {
+    event.preventDefault()
+    setDragging(true)
+  }
+
+  return (
+    <ModalSheet titleId="import-modal-title" onDismiss={onDismiss} className="sheet-wide debt-sheet">
+      <div className="sheet-head">
+        <div>
+          <span className="debt-eyebrow">Add multiple debts at once</span>
+          <h2 id="import-modal-title">Import Your Debts</h2>
+          <p className="muted" style={{ margin: '0.2rem 0 0', fontSize: '0.88rem' }}>
+            Upload a file with your loan details — we'll do the rest.
+          </p>
+        </div>
+        <button type="button" className="text-btn" onClick={onDismiss}>Close</button>
+      </div>
+
+      {/* Step 1: How it works */}
+      <div style={{ background: 'var(--sage)', borderRadius: '12px', padding: '1rem 1.2rem', margin: '1rem 0' }}>
+        <strong style={{ fontSize: '0.92rem', display: 'block', marginBottom: '0.5rem' }}>📋 How it works</strong>
+        <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', flex: '1 1 160px' }}>
+            <span style={{ background: 'var(--pine)', color: '#fff', borderRadius: '50%', width: '1.5rem', height: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0 }}>1</span>
+            <span style={{ fontSize: '0.85rem' }}>Download a template or prepare your own file</span>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', flex: '1 1 160px' }}>
+            <span style={{ background: 'var(--pine)', color: '#fff', borderRadius: '50%', width: '1.5rem', height: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0 }}>2</span>
+            <span style={{ fontSize: '0.85rem' }}>Fill in your loan details — name, amount, balance, EMI, etc.</span>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', flex: '1 1 160px' }}>
+            <span style={{ background: 'var(--pine)', color: '#fff', borderRadius: '50%', width: '1.5rem', height: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, flexShrink: 0 }}>3</span>
+            <span style={{ fontSize: '0.85rem' }}>Upload the file here — review and confirm before saving</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Step 2: Download templates */}
+      <div style={{ margin: '0.8rem 0' }}>
+        <strong style={{ fontSize: '0.9rem', display: 'block', marginBottom: '0.5rem' }}>📥 Download a ready-made template</strong>
+        <p style={{ fontSize: '0.82rem', color: 'var(--muted)', margin: '0 0 0.6rem' }}>
+          Fill in your details and upload the file back here. Use whichever format is easiest for you.
+        </p>
+        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => downloadTemplate('excel')} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            <span style={{ fontSize: '1.1rem' }}>📊</span> Excel Template (.xlsx)
+          </button>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => downloadTemplate('csv')} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            <span style={{ fontSize: '1.1rem' }}>📄</span> CSV Template (.csv)
+          </button>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => downloadTemplate('json')} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            <span style={{ fontSize: '1.1rem' }}>🔧</span> JSON Template
+          </button>
+        </div>
+      </div>
+
+      {/* Step 3: Upload area */}
+      <input
+        ref={localFileRef}
+        type="file"
+        accept=".json,.csv,.xlsx,.xls,application/json,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        className="sr-only"
+        onChange={handleFileChange}
+        aria-label="Choose debt file to import"
+      />
+      <div
+        className={`dropzone${dragging ? ' active' : ''}`}
+        onClick={() => localFileRef.current?.click()}
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+        onDragLeave={() => setDragging(false)}
+        style={{ margin: '1rem 0', padding: '2rem 1.5rem', minHeight: 0 }}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') localFileRef.current?.click() }}
+      >
+        <div className="dropzone-icon-circle" style={{ width: '3rem', height: '3rem', marginBottom: '0.3rem' }}>
+          <span style={{ fontSize: '1.4rem' }}>📁</span>
+        </div>
+        <p style={{ fontWeight: 600 }}>
+          {dragging ? 'Drop your file here!' : 'Click to browse or drag & drop your file'}
+        </p>
+        <small style={{ color: 'var(--muted)' }}>
+          Supports <strong>Excel (.xlsx)</strong>, <strong>CSV</strong>, and <strong>JSON</strong> files
+        </small>
+      </div>
+
+      {error ? (
+        <div role="alert" style={{ background: 'rgba(229,62,62,0.08)', border: '1px solid rgba(229,62,62,0.25)', borderRadius: '10px', padding: '0.75rem 1rem', margin: '0.5rem 0', fontSize: '0.88rem', color: '#c53030' }}>
+          <strong>⚠️ Could not import:</strong> {error}
+        </div>
+      ) : null}
+
+      {/* Collapsible: What columns does my file need? */}
+      <details style={{ margin: '0.8rem 0' }}>
+        <summary style={{ fontSize: '0.88rem', fontWeight: 600, cursor: 'pointer', color: 'var(--ink)', padding: '0.3rem 0' }}>
+          ❓ What columns should my file have?
+        </summary>
+        <div style={{ padding: '0.6rem 0 0' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem' }}>
+            <div style={{ background: 'var(--sage)', padding: '0.8rem', borderRadius: '10px' }}>
+              <strong style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.82rem', color: 'var(--ink)' }}>Must have (at least these)</strong>
+              <ul style={{ margin: 0, paddingLeft: '1.1rem', fontSize: '0.82rem', lineHeight: 1.7, listStyle: 'none' }}>
+                <li>✅ <strong>Name</strong> — what you call this loan</li>
+                <li>✅ <strong>Loan Amount</strong> — total you borrowed</li>
+                <li>✅ <strong>Balance</strong> — how much is still left</li>
+              </ul>
+            </div>
+            <div style={{ background: 'var(--sage)', padding: '0.8rem', borderRadius: '10px' }}>
+              <strong style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.82rem', color: 'var(--ink)' }}>Nice to have (fills in more details)</strong>
+              <ul style={{ margin: 0, paddingLeft: '1.1rem', fontSize: '0.82rem', lineHeight: 1.7, listStyle: 'none' }}>
+                <li>💡 <strong>Lender / Bank</strong></li>
+                <li>💡 <strong>EMI</strong> — monthly payment amount</li>
+                <li>💡 <strong>Interest Rate</strong> — annual %</li>
+                <li>💡 <strong>Tenure</strong> — total months of the loan</li>
+                <li>💡 <strong>Start Date</strong> — when the loan began</li>
+                <li>💡 <strong>Due Date</strong> — next payment date</li>
+              </ul>
+            </div>
+          </div>
+          <p style={{ fontSize: '0.78rem', color: 'var(--muted)', marginTop: '0.5rem', lineHeight: 1.5 }}>
+            💡 <em>Don't worry about exact column names — we understand common variations like "Loan Amount", "Original Amount", "Sanctioned Amount", "Amount", etc.</em>
+          </p>
+        </div>
+      </details>
+
+      {/* Collapsible advanced: JSON sample */}
+      <details style={{ margin: '0.5rem 0 0' }}>
+        <summary style={{ fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', color: 'var(--muted)', padding: '0.3rem 0' }}>
+          🔧 For developers: JSON format reference
+        </summary>
+        <div style={{ padding: '0.6rem 0 0' }}>
+          <pre style={{
+            background: 'rgba(0,0,0,0.12)',
+            padding: '0.8rem',
+            borderRadius: '8px',
+            overflowX: 'auto',
+            fontSize: '0.78rem',
+            maxHeight: '180px',
+          }}>
+            <code>{sampleJson}</code>
+          </pre>
+        </div>
+      </details>
+
+      <div className="debt-form-actions" style={{ marginTop: '1rem' }}>
+        <button type="button" className="btn btn-secondary" onClick={onDismiss}>Cancel</button>
+      </div>
+    </ModalSheet>
+  )
+}
+
 export default function DebtTracker({
   debts = [],
   payments = [],
@@ -278,8 +756,9 @@ export default function DebtTracker({
 }) {
   const [editingDebt, setEditingDebt] = useState(null)
   const [paymentDebt, setPaymentDebt] = useState(null)
+  const [previewDebts, setPreviewDebts] = useState(null)
+  const [importModalOpen, setImportModalOpen] = useState(false)
   const [feedback, setFeedback] = useState('')
-  const fileRef = useRef(null)
   const today = todayISO()
   const activeDebts = useMemo(() => debts.filter((debt) => debt.status !== 'paid' && debt.balance > 0), [debts])
   const totalBalance = activeDebts.reduce((sum, debt) => sum + debt.balance, 0)
@@ -302,20 +781,22 @@ export default function DebtTracker({
       .map((schedule) => [schedule.debtId, schedule])
   ), [recurringExpenses])
 
-  async function handleImport(event) {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file) return
-    try {
-      const text = await file.text()
-      const result = onImportDebts(text)
-      setFeedback(result.ok
-        ? `Imported ${result.imported} debts${result.skipped ? ` · skipped ${result.skipped} duplicates or invalid records` : ''}.`
-        : result.error)
-    } catch (error) {
-      console.error('Debt import failed:', error)
-      setFeedback('The selected debt file could not be read.')
-    }
+  function handleConfirmImport(selectedDebts) {
+    const result = onImportDebts(selectedDebts)
+    setPreviewDebts(null)
+    setFeedback(result.ok
+      ? `Imported ${result.imported} debts${result.skipped ? ` · skipped ${result.skipped} duplicates or invalid records` : ''}.`
+      : result.error)
+  }
+
+  function handleExportDebts() {
+    const blob = new Blob([JSON.stringify(debts, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `debts-export-${today}.json`
+    link.click()
+    URL.revokeObjectURL(url)
   }
 
   const sortedDebts = [...debts].sort((a, b) => {
@@ -336,8 +817,10 @@ export default function DebtTracker({
           <p>Track what remains, what’s due, and every payment made.</p>
         </div>
         <div className="debt-head-actions">
-          <input ref={fileRef} type="file" accept="application/json,.json" className="sr-only" onChange={handleImport} aria-label="Import debt JSON file" />
-          <button type="button" className="btn btn-secondary" onClick={() => fileRef.current?.click()}>Import JSON</button>
+          {debts.length > 0 ? (
+            <button type="button" className="btn btn-secondary" onClick={handleExportDebts}>Export JSON</button>
+          ) : null}
+          <button type="button" className="btn btn-secondary" onClick={() => setImportModalOpen(true)}>Import Debts</button>
           <button type="button" className="btn btn-primary" onClick={() => setEditingDebt({})}>+ Add debt</button>
         </div>
       </header>
@@ -413,7 +896,10 @@ export default function DebtTracker({
                 <div className="debt-card-facts">
                   <span>{monthlyObligation(debt) ? `${formatINR(monthlyObligation(debt))} / month` : 'No payment listed'}</span>
                   <span>{debt.monthlyRate != null ? `${debt.monthlyRate}% / month` : debt.rate != null ? `${debt.rate}% annual` : 'Rate not set'}</span>
-                  <span>{debt.monthsRemaining != null ? `${debt.monthsRemaining} months left` : 'Term not set'}</span>
+                  <span>{(() => {
+                    const monthsLeft = calculateRemainingMonths(debt, today)
+                    return monthsLeft != null ? `${monthsLeft} ${monthsLeft === 1 ? 'month' : 'months'} left` : (debt.monthsRemaining != null ? `${debt.monthsRemaining} months left` : 'Term not set')
+                  })()}</span>
                 </div>
 
                 <div className="debt-card-footer">
@@ -476,6 +962,24 @@ export default function DebtTracker({
           linkedSchedule={linkedEmiByDebt.get(paymentDebt.id)}
           onSave={onRecordPayment}
           onCancel={() => setPaymentDebt(null)}
+        />
+      ) : null}
+      {previewDebts ? (
+        <DebtImportPreviewModal
+          items={previewDebts}
+          today={today}
+          onConfirm={handleConfirmImport}
+          onCancel={() => setPreviewDebts(null)}
+        />
+      ) : null}
+      {importModalOpen ? (
+        <DebtImportModal
+          existingDebts={debts}
+          onDismiss={() => setImportModalOpen(false)}
+          onFileParsed={(previewList) => {
+            setImportModalOpen(false)
+            setPreviewDebts(previewList)
+          }}
         />
       ) : null}
     </section>
