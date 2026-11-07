@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { normalizeData } from './storage.js'
-import { applyDebtPayment, normalizeDebt, normalizeDebtPayment, parseDebtImport } from './debts.js'
+import { applyDebtPayment, calculateRemainingMonths, guessLoanAmount, normalizeDebt, normalizeDebtPayment, parseCSV, parseDebtImport } from './debts.js'
 
 test('normalizes legacy debt exports and retains informal-loan balances and monthly rates', () => {
   const debt = normalizeDebt({
@@ -118,3 +118,85 @@ test('normalizes persisted debt records and payment history', () => {
   assert.equal(data.debts[0].balance, 750)
   assert.equal(data.debtPayments.length, 1)
 })
+
+test('guessLoanAmount parses amounts from names and multiplies installments by EMI', () => {
+  assert.equal(guessLoanAmount('12 Lakh Loan', 26124, 2), 1200000)
+  assert.equal(guessLoanAmount('Car Loan 5.5 Lacs', 15000, 48), 550000)
+  assert.equal(guessLoanAmount('Home Loan 1.2 Crore', 95000, 240), 12000000)
+  assert.equal(guessLoanAmount('Personal Loan 50k', 5000, 12), 50000)
+  assert.equal(guessLoanAmount('Generic Loan', 10000, 24), 240000)
+  assert.equal(guessLoanAmount('Generic Loan', 0, 0), 0)
+})
+
+test('calculateRemainingMonths automatically computes remaining months based on current date', () => {
+  // Paid or zero balance returns 0
+  assert.equal(calculateRemainingMonths({ status: 'paid', balance: 0 }, '2026-11-07'), 0)
+  assert.equal(calculateRemainingMonths({ balance: 0 }, '2026-11-07'), 0)
+
+  // Contract term: Loan taken 2026-06-04 with 24 months tenure evaluated at 2026-11-07
+  // June to Nov is 5 elapsed months. 24 - 5 = 19 months left.
+  assert.equal(calculateRemainingMonths({
+    loanTakenDate: '2026-06-04',
+    totalMonths: 24,
+    balance: 289731,
+    nextDue: '2026-08-02',
+  }, '2026-11-07'), 19)
+
+  // Due day boundary: If today is before due day in current month, current month is still counted in remaining
+  // Loan taken 2021-11-24 with 60 months tenure. Next due is 8th of month.
+  // On 2026-11-07 (before 8th): 60 - 59 = 1 month left
+  assert.equal(calculateRemainingMonths({
+    loanTakenDate: '2021-11-24',
+    totalMonths: 60,
+    balance: 127218,
+    nextDue: '2026-11-08',
+  }, '2026-11-07'), 1)
+
+  // On 2026-11-09 (after 8th): 60 - 60 = 0 months left
+  assert.equal(calculateRemainingMonths({
+    loanTakenDate: '2021-11-24',
+    totalMonths: 60,
+    balance: 127218,
+    nextDue: '2026-11-08',
+  }, '2026-11-09'), 0)
+
+  // Hand loan without loanTakenDate using balance and 0% EMI: 135000 / 5000 = 27 months
+  assert.equal(calculateRemainingMonths({
+    balance: 135000,
+    emi: 5000,
+    rate: 0,
+  }, '2026-11-07'), 27)
+
+  // Amortization payoff: Balance 10000, EMI 1000, Rate 12% annual (1% mo)
+  // n = -ln(1 - 0.01 * 10000 / 1000) / ln(1.01) = -ln(0.9) / ln(1.01) = 10.57 -> 11 months
+  assert.equal(calculateRemainingMonths({
+    balance: 10000,
+    emi: 1000,
+    rate: 12,
+  }, '2026-11-07'), 11)
+})
+
+test('parseCSV parses human-friendly CSV headers into debt objects', () => {
+  const csv = `Loan Name,Bank,Loan Amount,Balance,EMI,Interest Rate,Tenure,Start Date,Due Date
+Home Loan,SBI Bank,2500000,2100000,22000,8.5,240,2024-03-15,2026-12-05
+Personal Loan,HDFC,500000,420000,15200,12.5,36,2025-01-10,2026-12-05`
+
+  const rows = parseCSV(csv)
+  assert.equal(rows.length, 2)
+  assert.equal(rows[0].name, 'Home Loan')
+  assert.equal(rows[0].lender, 'SBI Bank')
+  assert.equal(rows[0].originalAmount, '2500000')
+  assert.equal(rows[0].balance, '2100000')
+  assert.equal(rows[0].emi, '22000')
+  assert.equal(rows[0].rate, '8.5')
+  assert.equal(rows[0].totalMonths, '240')
+
+  const imported = parseDebtImport(rows)
+  assert.equal(imported.ok, true)
+  assert.equal(imported.debts.length, 2)
+  assert.equal(imported.debts[0].name, 'Home Loan')
+  assert.equal(imported.debts[0].originalAmount, 2500000)
+  assert.equal(imported.debts[0].balance, 2100000)
+})
+
+

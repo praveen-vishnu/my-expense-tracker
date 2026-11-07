@@ -1,4 +1,4 @@
-import { isValidDate } from './formatting.js'
+import { isValidDate, todayISO } from './formatting.js'
 
 function optionalAmount(value) {
   if (value == null || value === '') return null
@@ -10,6 +10,73 @@ function optionalInteger(value) {
   if (value == null || value === '') return null
   const number = Number(value)
   return Number.isInteger(number) && number >= 0 ? number : null
+}
+
+export function calculateRemainingMonths(debt, currentDate = todayISO()) {
+  if (!debt || typeof debt !== 'object') return null
+  if (debt.status === 'paid' || (debt.balance != null && Number(debt.balance) <= 0)) {
+    return 0
+  }
+
+  const [currYear, currMonth, currDay] = (currentDate || todayISO()).split('-').map(Number)
+
+  // 1. Contract term from loanTakenDate and totalMonths
+  const totalMonths = optionalInteger(debt.totalMonths ?? debt.total_months)
+  const loanTakenDate = debt.loanTakenDate ?? debt.loan_taken_date
+  if (loanTakenDate && totalMonths && totalMonths > 0) {
+    const [startYear, startMonth, startDay] = String(loanTakenDate).split('-').map(Number)
+    if (startYear && startMonth) {
+      let elapsedMonths = (currYear - startYear) * 12 + (currMonth - startMonth)
+      const nextDueDate = debt.nextDue ?? debt.next_due
+      const dueDay = (nextDueDate ? Number(String(nextDueDate).split('-')[2]) : null) || startDay || 1
+      if (currDay < dueDay) {
+        elapsedMonths = Math.max(0, elapsedMonths - 1)
+      }
+      const remaining = totalMonths - elapsedMonths
+      if (remaining >= 0) {
+        return remaining
+      }
+    }
+  }
+
+  // 2. Calendar elapsed from nextDue or created_at against stored monthsRemaining
+  const staticRemaining = optionalInteger(debt.monthsRemaining ?? debt.months_remaining)
+  if (staticRemaining != null && staticRemaining > 0) {
+    const refDate = debt.nextDue ?? debt.next_due ?? (typeof debt.created_at === 'string' ? debt.created_at.slice(0, 10) : null)
+    if (refDate && /^\d{4}-\d{2}/.test(String(refDate))) {
+      const [refYear, refMonth, refDay] = String(refDate).split('-').map(Number)
+      if (refYear && refMonth) {
+        let elapsed = (currYear - refYear) * 12 + (currMonth - refMonth)
+        if (refDay && currDay < refDay) elapsed = Math.max(0, elapsed - 1)
+        if (elapsed > 0) {
+          return Math.max(0, staticRemaining - elapsed)
+        }
+      }
+    }
+    return staticRemaining
+  }
+
+  // 3. Payoff amortization from remaining balance, EMI, and interest rate
+  const balance = optionalAmount(debt.balance)
+  const emi = optionalAmount(debt.emi ?? debt.monthlyPayment ?? debt.minDue)
+  if (balance != null && balance > 0 && emi != null && emi > 0) {
+    const monthlyRate = optionalAmount(debt.monthlyRate ?? debt.monthly_rate)
+    const annualRate = optionalAmount(debt.rate ?? debt.apr)
+    const rate = monthlyRate != null ? monthlyRate : (annualRate != null ? annualRate / 12 : 0)
+    const r = rate > 0 ? rate / 100 : 0
+    if (r > 0) {
+      if (r * balance < emi) {
+        const n = -Math.log(1 - (r * balance) / emi) / Math.log(1 + r)
+        if (Number.isFinite(n) && n > 0) {
+          return Math.ceil(n)
+        }
+      }
+    } else {
+      return Math.ceil(balance / emi)
+    }
+  }
+
+  return staticRemaining ?? null
 }
 
 export function normalizeDebt(debt) {
@@ -31,6 +98,26 @@ export function normalizeDebt(debt) {
   const interestDate = debt.nextInterestDue ?? debt.next_interest_due
   const nextInterestDue = typeof interestDate === 'string' && isValidDate(interestDate) ? interestDate : null
 
+  const explicitMonths = optionalInteger(debt.monthsRemaining ?? debt.months_remaining)
+  const totalMonths = optionalInteger(debt.totalMonths ?? debt.total_months)
+  const emi = optionalAmount(debt.emi ?? debt.monthlyPayment ?? debt.minDue)
+  const rate = optionalAmount(debt.rate ?? debt.apr)
+  const monthlyRate = optionalAmount(debt.monthlyRate ?? debt.monthly_rate)
+
+  const computedMonths = calculateRemainingMonths({
+    ...debt,
+    balance,
+    loanTakenDate,
+    totalMonths,
+    nextDue,
+    emi,
+    rate,
+    monthlyRate,
+    monthsRemaining: explicitMonths,
+    status: balance === 0 ? 'paid' : (debt.status || 'active'),
+  })
+  const monthsRemaining = computedMonths != null ? computedMonths : explicitMonths
+
   return {
     id,
     kind,
@@ -39,18 +126,18 @@ export function normalizeDebt(debt) {
     lender: typeof debt.lender === 'string' ? debt.lender.trim() : '',
     originalAmount,
     balance,
-    rate: optionalAmount(debt.rate),
-    emi: optionalAmount(debt.emi),
+    rate,
+    emi,
     nextDue,
-    monthsRemaining: optionalInteger(debt.monthsRemaining ?? debt.months_remaining),
-    totalMonths: optionalInteger(debt.totalMonths ?? debt.total_months),
+    monthsRemaining,
+    totalMonths,
     principalPaid: optionalAmount(debt.principalPaid ?? debt.principal_paid) ?? Math.max(originalAmount - balance, 0),
     interestPaid: optionalAmount(debt.interestPaid ?? debt.interest_paid) ?? 0,
     limitAmount: optionalAmount(debt.limitAmount ?? debt.limit_amount),
     apr: optionalAmount(debt.apr),
     minDue: optionalAmount(debt.minDue ?? debt.min_due),
     borrower: typeof debt.borrower === 'string' ? debt.borrower.trim() : '',
-    monthlyRate: optionalAmount(debt.monthlyRate ?? debt.monthly_rate),
+    monthlyRate,
     nextInterestDue,
     loanTakenDate,
     status: debt.status === 'paid' || balance === 0 ? 'paid' : 'active',
@@ -106,15 +193,174 @@ export function applyDebtPayment(debt, payment) {
   })
 }
 
-export function parseDebtImport(text) {
-  let parsed
+/** Map common human-friendly headers to normalizeDebt field names */
+const HEADER_ALIASES = {
+  // name
+  'name': 'name', 'loan name': 'name', 'debt name': 'name', 'description': 'name',
+  // id
+  'id': 'id', 'loan id': 'id', 'debt id': 'id',
+  // lender
+  'lender': 'lender', 'bank': 'lender', 'bank name': 'lender', 'institution': 'lender', 'financer': 'lender',
+  // kind
+  'kind': 'kind', 'type': 'kind', 'loan type': 'kind', 'debt type': 'kind',
+  // category
+  'category': 'category', 'loan category': 'category',
+  // originalAmount
+  'original amount': 'originalAmount', 'originalamount': 'originalAmount', 'original_amount': 'originalAmount',
+  'original': 'originalAmount', 'loan amount': 'originalAmount', 'total borrowed': 'originalAmount',
+  'principal': 'originalAmount', 'sanctioned amount': 'originalAmount', 'amount': 'originalAmount',
+  // balance
+  'balance': 'balance', 'current balance': 'balance', 'remaining balance': 'balance',
+  'outstanding': 'balance', 'outstanding balance': 'balance', 'remaining': 'balance',
+  'principal_remaining': 'balance', 'principal remaining': 'balance',
+  // emi
+  'emi': 'emi', 'monthly emi': 'emi', 'installment': 'emi', 'monthly payment': 'emi',
+  'monthlypayment': 'emi', 'min due': 'emi', 'mindue': 'emi', 'min_due': 'emi',
+  // rate
+  'rate': 'rate', 'interest rate': 'rate', 'interest': 'rate', 'annual rate': 'rate',
+  'rate of interest': 'rate', 'roi': 'rate', 'apr': 'rate',
+  // monthly rate
+  'monthly rate': 'monthlyRate', 'monthlyrate': 'monthlyRate', 'monthly_rate': 'monthlyRate',
+  // totalMonths
+  'total months': 'totalMonths', 'totalmonths': 'totalMonths', 'total_months': 'totalMonths',
+  'tenure': 'totalMonths', 'tenure months': 'totalMonths', 'loan tenure': 'totalMonths',
+  'term': 'totalMonths', 'term months': 'totalMonths',
+  // loanTakenDate
+  'loan taken date': 'loanTakenDate', 'loantakendate': 'loanTakenDate', 'loan_taken_date': 'loanTakenDate',
+  'start date': 'loanTakenDate', 'disbursement date': 'loanTakenDate', 'disbursal date': 'loanTakenDate',
+  'loan date': 'loanTakenDate', 'taken date': 'loanTakenDate',
+  // nextDue
+  'next due': 'nextDue', 'nextdue': 'nextDue', 'next_due': 'nextDue',
+  'due date': 'nextDue', 'next emi date': 'nextDue', 'next payment date': 'nextDue',
+  // months remaining
+  'months remaining': 'monthsRemaining', 'monthsremaining': 'monthsRemaining', 'months_remaining': 'monthsRemaining',
+  'remaining months': 'monthsRemaining',
+  // borrower
+  'borrower': 'borrower',
+  // principalPaid
+  'principal paid': 'principalPaid', 'principalpaid': 'principalPaid', 'principal_paid': 'principalPaid',
+  // interestPaid
+  'interest paid': 'interestPaid', 'interestpaid': 'interestPaid', 'interest_paid': 'interestPaid',
+}
+
+function mapHeaderToField(header) {
+  const key = String(header).trim().toLowerCase().replace(/[_\s]+/g, ' ')
+  return HEADER_ALIASES[key] || null
+}
+
+/**
+ * Parse CSV text into an array of row objects.
+ * Handles quoted values with commas/newlines inside.
+ */
+export function parseCSV(text) {
+  if (!text || typeof text !== 'string') return []
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  const rows = []
+  let current = ''
+  let inQuotes = false
+  for (let i = 0; i < lines.length; i++) {
+    const ch = lines[i]
+    if (inQuotes) {
+      if (ch === '"' && lines[i + 1] === '"') {
+        current += '"'
+        i++
+      } else if (ch === '"') {
+        inQuotes = false
+      } else {
+        current += ch
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true
+      } else if (ch === '\n') {
+        rows.push(current)
+        current = ''
+      } else {
+        current += ch
+      }
+    }
+  }
+  if (current.trim()) rows.push(current)
+
+  if (rows.length < 2) return [] // need header + at least 1 data row
+  const headers = rows[0].split(',').map((h) => h.trim())
+  const fieldMap = headers.map(mapHeaderToField)
+
+  // At least "name" must be present
+  if (!fieldMap.includes('name')) return []
+
+  const result = []
+  for (let r = 1; r < rows.length; r++) {
+    const cells = rows[r].split(',').map((c) => c.trim())
+    if (cells.every((c) => !c)) continue // skip blank rows
+    const obj = {}
+    for (let c = 0; c < headers.length; c++) {
+      const field = fieldMap[c]
+      if (field && cells[c] !== undefined && cells[c] !== '') {
+        obj[field] = cells[c]
+      }
+    }
+    // Auto-generate id if not provided
+    if (!obj.id) {
+      obj.id = `import-${Date.now()}-${r}`
+    }
+    if (obj.name) result.push(obj)
+  }
+  return result
+}
+
+/**
+ * Parse an Excel ArrayBuffer into an array of row objects using SheetJS.
+ * Returns [] if xlsx is not available or parsing fails.
+ */
+export async function parseExcel(buffer) {
   try {
-    parsed = JSON.parse(text)
+    const mod = await import('xlsx')
+    const XLSX = mod.default || mod
+    const workbook = XLSX.read(buffer, { type: 'array' })
+    const sheetName = workbook.SheetNames[0]
+    if (!sheetName) return []
+    const sheet = workbook.Sheets[sheetName]
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' })
+    if (!rows.length) return []
+
+    // Map headers using aliases
+    const rawHeaders = Object.keys(rows[0])
+    const result = []
+    for (let r = 0; r < rows.length; r++) {
+      const raw = rows[r]
+      const obj = {}
+      for (const header of rawHeaders) {
+        const field = mapHeaderToField(header)
+        if (field) {
+          const val = raw[header]
+          if (val !== '' && val != null) obj[field] = val
+        }
+      }
+      if (!obj.id) obj.id = `import-${Date.now()}-${r}`
+      if (obj.name) result.push(obj)
+    }
+    return result
   } catch {
-    return { ok: false, error: 'That file is not valid JSON.' }
+    return []
+  }
+}
+
+export function parseDebtImport(input) {
+  let records
+  if (Array.isArray(input)) {
+    records = input
+  } else if (typeof input === 'object' && input !== null) {
+    records = Array.isArray(input.debts) ? input.debts : [input]
+  } else {
+    try {
+      const parsed = JSON.parse(input)
+      records = Array.isArray(parsed) ? parsed : parsed?.debts
+    } catch {
+      return { ok: false, error: 'That file is not valid JSON.' }
+    }
   }
 
-  const records = Array.isArray(parsed) ? parsed : parsed?.debts
   if (!Array.isArray(records)) {
     return { ok: false, error: 'Debt import must be a JSON list or an object containing a debts list.' }
   }
@@ -128,8 +374,35 @@ export function parseDebtImport(text) {
       return true
     })
   if (records.length && !debts.length) {
-    return { ok: false, error: 'No valid debts were found. Each debt needs an id, name, original amount, and balance.' }
+    return { ok: false, error: 'No valid debts were found. Each debt needs a name, loan amount, and balance at minimum.' }
   }
 
   return { ok: true, debts, skipped: records.length - debts.length }
 }
+
+export function guessLoanAmount(name, emiAmount, installments) {
+  if (typeof name === 'string') {
+    const lakhMatch = name.match(/(\d+(?:\.\d+)?)\s*(?:lakh|lakhs|lac|lacs|l)\b/i)
+    if (lakhMatch) {
+      const val = parseFloat(lakhMatch[1])
+      if (Number.isFinite(val) && val > 0) return Math.round(val * 100000)
+    }
+    const crMatch = name.match(/(\d+(?:\.\d+)?)\s*(?:crore|crores|cr)\b/i)
+    if (crMatch) {
+      const val = parseFloat(crMatch[1])
+      if (Number.isFinite(val) && val > 0) return Math.round(val * 10000000)
+    }
+    const kMatch = name.match(/(\d+(?:\.\d+)?)\s*k\b/i)
+    if (kMatch) {
+      const val = parseFloat(kMatch[1])
+      if (Number.isFinite(val) && val > 0) return Math.round(val * 1000)
+    }
+  }
+  const emi = Number(emiAmount) || 0
+  const inst = Number(installments) || 0
+  if (emi > 0 && inst > 0) {
+    return Math.round(emi * inst)
+  }
+  return 0
+}
+
