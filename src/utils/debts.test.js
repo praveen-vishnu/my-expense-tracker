@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { normalizeData } from './storage.js'
-import { applyDebtPayment, calculatePaymentSplit, calculateRemainingMonths, guessLoanAmount, normalizeDebt, normalizeDebtPayment, parseCSV, parseDebtImport } from './debts.js'
+import { applyDebtPayment, calculatePaymentSplit, calculateRemainingMonths, formatRemainingTenure, guessLoanAmount, normalizeDebt, normalizeDebtPayment, parseCSV, parseDebtImport } from './debts.js'
 
 test('normalizes legacy debt exports and retains informal-loan balances and monthly rates', () => {
   const debt = normalizeDebt({
@@ -152,13 +152,28 @@ test('calculateRemainingMonths automatically computes remaining months based on 
     nextDue: '2026-11-08',
   }, '2026-11-07'), 1)
 
-  // On 2026-11-09 (after 8th): 60 - 60 = 0 months left
+  // On 2026-11-09 (after 8th): 60 contract months elapsed, but unpaid balance returns minimum 1 month remaining
   assert.equal(calculateRemainingMonths({
     loanTakenDate: '2021-11-24',
     totalMonths: 60,
     balance: 127218,
     nextDue: '2026-11-08',
+  }, '2026-11-09'), 1)
+
+  // When fully paid off (balance 0), returns 0
+  assert.equal(calculateRemainingMonths({
+    loanTakenDate: '2021-11-24',
+    totalMonths: 60,
+    balance: 0,
+    nextDue: '2026-11-08',
   }, '2026-11-09'), 0)
+
+  // With EMI and balance, calculates true financial payoff via amortization (5-6 months)
+  assert.equal(calculateRemainingMonths({
+    balance: 127218,
+    emi: 26124,
+    rate: 10.7,
+  }, '2026-11-09'), 6)
 
   // Hand loan without loanTakenDate using balance and 0% EMI: 135000 / 5000 = 27 months
   assert.equal(calculateRemainingMonths({
@@ -174,6 +189,44 @@ test('calculateRemainingMonths automatically computes remaining months based on 
     emi: 1000,
     rate: 12,
   }, '2026-11-07'), 11)
+
+  // Interest-only loan (EMI equals monthly interest, principal never amortizes)
+  assert.equal(calculateRemainingMonths({
+    balance: 500000,
+    emi: 10000,
+    monthlyRate: 2,
+  }, '2026-11-07'), null)
+})
+
+test('formatRemainingTenure formats readable labels for amortizing, interest-only, and paid loans', () => {
+  // Amortizing with contract tenure
+  assert.equal(formatRemainingTenure({
+    balance: 127218,
+    emi: 26124,
+    rate: 10.7,
+    totalMonths: 60,
+  }, '2026-11-10'), '6 of 60 mo left')
+
+  // Interest-only
+  assert.equal(formatRemainingTenure({
+    balance: 500000,
+    emi: 10000,
+    monthlyRate: 2,
+  }, '2026-11-10'), 'Interest-only')
+
+  // Paid off
+  assert.equal(formatRemainingTenure({
+    balance: 0,
+    status: 'paid',
+  }, '2026-11-10'), 'Paid off')
+
+  // Zero interest hand loan with totalMonths
+  assert.equal(formatRemainingTenure({
+    balance: 135000,
+    emi: 5000,
+    rate: 0,
+    totalMonths: 40,
+  }, '2026-11-10'), '27 of 40 mo left')
 })
 
 test('parseCSV parses human-friendly CSV headers into debt objects', () => {

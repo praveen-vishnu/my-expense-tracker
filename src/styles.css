@@ -4946,6 +4946,59 @@ h2 {
   border-color: var(--line);
 }
 
+.debt-due.this-month-paid {
+  border-color: rgba(72, 187, 120, 0.45);
+  background: rgba(72, 187, 120, 0.14);
+  color: #276749;
+}
+
+.debt-due.pending {
+  border-color: rgba(237, 137, 54, 0.35);
+  background: rgba(237, 137, 54, 0.1);
+  color: #c05621;
+}
+
+.debt-month-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.42rem 0.68rem;
+  border-radius: 9px;
+  font-size: 0.74rem;
+  margin: 0.55rem 0 0.3rem;
+  transition: all 150ms ease;
+}
+
+.debt-month-indicator.paid {
+  background: rgba(72, 187, 120, 0.12);
+  border: 1px solid rgba(72, 187, 120, 0.28);
+  color: #276749;
+}
+
+.debt-month-indicator.pending {
+  background: rgba(237, 137, 54, 0.1);
+  border: 1px solid rgba(237, 137, 54, 0.24);
+  color: #c05621;
+}
+
+.debt-month-indicator.overdue {
+  background: rgba(229, 62, 62, 0.1);
+  border: 1px solid rgba(229, 62, 62, 0.25);
+  color: #c53030;
+}
+
+.debt-month-indicator .debt-month-icon {
+  font-size: 0.82rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.debt-month-indicator .debt-month-text {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.35;
+}
+
 .debt-card-balance {
   justify-content: space-between;
   gap: 1rem;
@@ -5224,6 +5277,36 @@ h2 {
 :root[data-theme='dark'] .debt-empty {
   background: #202a26;
   border-color: var(--line);
+}
+
+:root[data-theme='dark'] .debt-due.this-month-paid {
+  border-color: rgba(72, 187, 120, 0.4);
+  background: rgba(72, 187, 120, 0.16);
+  color: #68d391;
+}
+
+:root[data-theme='dark'] .debt-due.pending {
+  border-color: rgba(237, 137, 54, 0.4);
+  background: rgba(237, 137, 54, 0.16);
+  color: #f6ad55;
+}
+
+:root[data-theme='dark'] .debt-month-indicator.paid {
+  background: rgba(72, 187, 120, 0.14);
+  border-color: rgba(72, 187, 120, 0.3);
+  color: #68d391;
+}
+
+:root[data-theme='dark'] .debt-month-indicator.pending {
+  background: rgba(237, 137, 54, 0.14);
+  border-color: rgba(237, 137, 54, 0.3);
+  color: #f6ad55;
+}
+
+:root[data-theme='dark'] .debt-month-indicator.overdue {
+  background: rgba(229, 62, 62, 0.15);
+  border-color: rgba(229, 62, 62, 0.3);
+  color: #fc8181;
 }
 
 :root[data-theme='dark'] .debt-history-list {

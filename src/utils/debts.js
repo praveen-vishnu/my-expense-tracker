@@ -18,12 +18,54 @@ export function calculateRemainingMonths(debt, currentDate = todayISO()) {
     return 0
   }
 
-  const [currYear, currMonth, currDay] = (currentDate || todayISO()).split('-').map(Number)
+  const balance = optionalAmount(debt.balance)
+  const emi = optionalAmount(debt.emi ?? debt.monthlyPayment ?? debt.minDue)
+  const monthlyRate = optionalAmount(debt.monthlyRate ?? debt.monthly_rate)
+  const annualRate = optionalAmount(debt.rate ?? debt.apr)
+  const rate = monthlyRate != null ? monthlyRate : (annualRate != null ? annualRate / 12 : 0)
+  const r = rate > 0 ? rate / 100 : 0
 
-  // 1. Contract term from loanTakenDate and totalMonths
+  // 1. Amortization payoff if balance and regular EMI are available (true financial payoff)
+  if (balance != null && balance > 0 && emi != null && emi > 0) {
+    if (r > 0) {
+      if (r * balance < emi) {
+        const n = -Math.log(1 - (r * balance) / emi) / Math.log(1 + r)
+        if (Number.isFinite(n) && n > 0) {
+          return Math.ceil(n)
+        }
+      } else {
+        // Interest-only loan: EMI covers only interest, principal does not amortize monthly
+        return null
+      }
+    } else {
+      return Math.ceil(balance / emi)
+    }
+  }
+
+  // 2. Explicit stored remaining months with calendar elapsed adjustment
+  const staticRemaining = optionalInteger(debt.monthsRemaining ?? debt.months_remaining)
+  if (staticRemaining != null && staticRemaining > 0) {
+    const [currYear, currMonth, currDay] = (currentDate || todayISO()).split('-').map(Number)
+    const refDate = debt.nextDue ?? debt.next_due ?? (typeof debt.created_at === 'string' ? debt.created_at.slice(0, 10) : null)
+    if (refDate && /^\d{4}-\d{2}/.test(String(refDate))) {
+      const [refYear, refMonth, refDay] = String(refDate).split('-').map(Number)
+      if (refYear && refMonth) {
+        let elapsed = (currYear - refYear) * 12 + (currMonth - refMonth)
+        if (refDay && currDay < refDay) elapsed = Math.max(0, elapsed - 1)
+        if (elapsed > 0) {
+          const remaining = staticRemaining - elapsed
+          return remaining > 0 ? remaining : (balance != null && balance > 0 ? 1 : 0)
+        }
+      }
+    }
+    return staticRemaining
+  }
+
+  // 3. Contract term fallback from loanTakenDate and totalMonths
   const totalMonths = optionalInteger(debt.totalMonths ?? debt.total_months)
   const loanTakenDate = debt.loanTakenDate ?? debt.loan_taken_date
   if (loanTakenDate && totalMonths && totalMonths > 0) {
+    const [currYear, currMonth, currDay] = (currentDate || todayISO()).split('-').map(Number)
     const [startYear, startMonth, startDay] = String(loanTakenDate).split('-').map(Number)
     if (startYear && startMonth) {
       let elapsedMonths = (currYear - startYear) * 12 + (currMonth - startMonth)
@@ -33,50 +75,52 @@ export function calculateRemainingMonths(debt, currentDate = todayISO()) {
         elapsedMonths = Math.max(0, elapsedMonths - 1)
       }
       const remaining = totalMonths - elapsedMonths
-      if (remaining >= 0) {
+      if (remaining > 0) {
         return remaining
       }
+      return balance != null && balance > 0 ? 1 : 0
     }
   }
 
-  // 2. Calendar elapsed from nextDue or created_at against stored monthsRemaining
-  const staticRemaining = optionalInteger(debt.monthsRemaining ?? debt.months_remaining)
-  if (staticRemaining != null && staticRemaining > 0) {
-    const refDate = debt.nextDue ?? debt.next_due ?? (typeof debt.created_at === 'string' ? debt.created_at.slice(0, 10) : null)
-    if (refDate && /^\d{4}-\d{2}/.test(String(refDate))) {
-      const [refYear, refMonth, refDay] = String(refDate).split('-').map(Number)
-      if (refYear && refMonth) {
-        let elapsed = (currYear - refYear) * 12 + (currMonth - refMonth)
-        if (refDay && currDay < refDay) elapsed = Math.max(0, elapsed - 1)
-        if (elapsed > 0) {
-          return Math.max(0, staticRemaining - elapsed)
-        }
-      }
-    }
-    return staticRemaining
+  return staticRemaining ?? (balance != null && balance > 0 ? 1 : 0)
+}
+
+/**
+ * Returns a human-friendly string for the debt's remaining tenure.
+ * Examples: "5 of 60 mo left", "22 mo left", "Interest-only", "Paid off"
+ */
+export function formatRemainingTenure(debt, currentDate = todayISO()) {
+  if (!debt || typeof debt !== 'object') return '—'
+  if (debt.status === 'paid' || (debt.balance != null && Number(debt.balance) <= 0)) {
+    return 'Paid off'
   }
 
-  // 3. Payoff amortization from remaining balance, EMI, and interest rate
   const balance = optionalAmount(debt.balance)
   const emi = optionalAmount(debt.emi ?? debt.monthlyPayment ?? debt.minDue)
-  if (balance != null && balance > 0 && emi != null && emi > 0) {
-    const monthlyRate = optionalAmount(debt.monthlyRate ?? debt.monthly_rate)
-    const annualRate = optionalAmount(debt.rate ?? debt.apr)
-    const rate = monthlyRate != null ? monthlyRate : (annualRate != null ? annualRate / 12 : 0)
-    const r = rate > 0 ? rate / 100 : 0
-    if (r > 0) {
-      if (r * balance < emi) {
-        const n = -Math.log(1 - (r * balance) / emi) / Math.log(1 + r)
-        if (Number.isFinite(n) && n > 0) {
-          return Math.ceil(n)
-        }
-      }
-    } else {
-      return Math.ceil(balance / emi)
-    }
+  const monthlyRate = optionalAmount(debt.monthlyRate ?? debt.monthly_rate)
+  const annualRate = optionalAmount(debt.rate ?? debt.apr)
+  const rate = monthlyRate != null ? monthlyRate : (annualRate != null ? annualRate / 12 : 0)
+  const r = rate > 0 ? rate / 100 : 0
+
+  if (r > 0 && balance > 0 && emi > 0 && r * balance >= emi) {
+    return 'Interest-only'
   }
 
-  return staticRemaining ?? null
+  const months = calculateRemainingMonths(debt, currentDate)
+  const totalMonths = optionalInteger(debt.totalMonths ?? debt.total_months)
+
+  if (months != null && months > 0) {
+    if (totalMonths && totalMonths >= months) {
+      return `${months} of ${totalMonths} mo left`
+    }
+    return `${months} ${months === 1 ? 'month' : 'months'} left`
+  }
+
+  if (totalMonths && totalMonths > 0) {
+    return `${totalMonths} mo term`
+  }
+
+  return 'Open term'
 }
 
 export function normalizeDebt(debt) {

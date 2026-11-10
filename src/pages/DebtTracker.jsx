@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import ModalSheet from '../components/ModalSheet.jsx'
 import { formatINR, formatShortDate, isValidDate, parseAmount, todayISO } from '../utils/formatting.js'
-import { calculatePaymentSplit, calculateRemainingMonths, parseDebtImport, parseCSV, parseExcel } from '../utils/debts.js'
+import { calculatePaymentSplit, calculateRemainingMonths, formatRemainingTenure, parseDebtImport, parseCSV, parseExcel } from '../utils/debts.js'
 
 function blankDebt() {
   return {
@@ -488,6 +488,7 @@ function monthlyObligation(debt) {
   if (debt.emi) return debt.emi
   if (debt.minDue) return debt.minDue
   if (debt.monthlyRate != null) return Math.round(debt.balance * debt.monthlyRate) / 100
+  if (debt.rate != null && debt.balance) return Math.round((debt.balance * debt.rate) / 1200)
   return 0
 }
 
@@ -557,16 +558,16 @@ function DebtImportPreviewModal({ items, onConfirm, onCancel, today }) {
                 </th>
                 <th>Debt name &amp; lender</th>
                 <th>Category</th>
-                <th>Current balance</th>
+                <th>Remaining balance</th>
                 <th>Monthly EMI</th>
                 <th>Interest rate</th>
-                <th>Remaining</th>
+                <th>Tenure left</th>
                 <th>Status</th>
               </tr>
             </thead>
             <tbody>
               {debts.map((item) => {
-                const months = calculateRemainingMonths(item, today)
+                const tenureLabel = formatRemainingTenure(item, today)
                 return (
                   <tr key={item.id} className={!item.selected ? 'row-dimmed' : ''}>
                     <td style={{ textAlign: 'center' }}>
@@ -594,8 +595,8 @@ function DebtImportPreviewModal({ items, onConfirm, onCancel, today }) {
                     <td style={{ fontSize: '0.8rem' }}>
                       {item.monthlyRate != null ? `${item.monthlyRate}%/mo` : (item.rate != null ? `${item.rate}% p.a.` : '—')}
                     </td>
-                    <td style={{ fontSize: '0.8rem' }}>
-                      {months != null ? `${months} mo` : '—'}
+                    <td style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+                      {tenureLabel}
                     </td>
                     <td>
                       {item.isDuplicate ? (
@@ -920,13 +921,12 @@ export default function DebtTracker({
   const [importModalOpen, setImportModalOpen] = useState(false)
   const [feedback, setFeedback] = useState('')
   const today = todayISO()
+  const currentMonthKey = today.slice(0, 7)
+  const currentMonthName = new Date(today + 'T00:00:00').toLocaleString('en-US', { month: 'short' })
   const activeDebts = useMemo(() => debts.filter((debt) => debt.status !== 'paid' && debt.balance > 0), [debts])
   const totalBalance = activeDebts.reduce((sum, debt) => sum + debt.balance, 0)
   const monthlyPayments = activeDebts.reduce((sum, debt) => sum + monthlyObligation(debt), 0)
-  const nextDue = activeDebts
-    .map((debt) => ({ ...debt, displayDue: debt.nextDue || debt.nextInterestDue }))
-    .filter((debt) => debt.displayDue)
-    .sort((a, b) => a.displayDue.localeCompare(b.displayDue))[0]
+
   const paymentByDebt = useMemo(() => {
     const map = new Map()
     for (const payment of payments) {
@@ -935,6 +935,45 @@ export default function DebtTracker({
     }
     return map
   }, [payments])
+
+  const paidDebtsThisMonth = useMemo(() => {
+    return activeDebts.filter((debt) => {
+      const list = paymentByDebt.get(debt.id) || []
+      return list.some((p) => p.date && p.date.slice(0, 7) === currentMonthKey)
+    })
+  }, [activeDebts, paymentByDebt, currentMonthKey])
+
+  const totalPaidThisMonth = useMemo(() => {
+    return payments
+      .filter((p) => p.date && p.date.slice(0, 7) === currentMonthKey)
+      .reduce((sum, p) => sum + (p.amount || 0), 0)
+  }, [payments, currentMonthKey])
+
+  const totalOriginalAmount = useMemo(() => {
+    return activeDebts.reduce((sum, debt) => sum + (debt.originalAmount || 0), 0)
+  }, [activeDebts])
+
+  const pendingObligationThisMonth = useMemo(() => {
+    const pendingDebts = activeDebts.filter((debt) => {
+      const list = paymentByDebt.get(debt.id) || []
+      return !list.some((p) => p.date && p.date.slice(0, 7) === currentMonthKey)
+    })
+    return pendingDebts.reduce((sum, debt) => sum + monthlyObligation(debt), 0)
+  }, [activeDebts, paymentByDebt, currentMonthKey])
+
+  const nextDue = activeDebts
+    .filter((debt) => {
+      const list = paymentByDebt.get(debt.id) || []
+      const paidThisMonth = list.some((p) => p.date && p.date.slice(0, 7) === currentMonthKey)
+      return !paidThisMonth
+    })
+    .map((debt) => ({ ...debt, displayDue: debt.nextDue || debt.nextInterestDue }))
+    .filter((debt) => debt.displayDue)
+    .sort((a, b) => a.displayDue.localeCompare(b.displayDue))[0] || activeDebts
+    .map((debt) => ({ ...debt, displayDue: debt.nextDue || debt.nextInterestDue }))
+    .filter((debt) => debt.displayDue)
+    .sort((a, b) => a.displayDue.localeCompare(b.displayDue))[0]
+
   const linkedEmiByDebt = useMemo(() => new Map(
     recurringExpenses
       .filter((schedule) => schedule.kind === 'emi' && schedule.debtId)
@@ -987,20 +1026,24 @@ export default function DebtTracker({
 
       <section className="debt-overview" aria-label="Debt summary">
         <div className="debt-total">
-          <span>Outstanding balance</span>
+          <span>Total remaining debt</span>
           <strong>{formatINR(totalBalance)}</strong>
-          <small>{activeDebts.length} active {activeDebts.length === 1 ? 'debt' : 'debts'}</small>
+          <small>{activeDebts.length} active {activeDebts.length === 1 ? 'liability' : 'liabilities'} · {formatINR(totalOriginalAmount)} original</small>
         </div>
         <div className="debt-overview-divider" />
         <div className="debt-stat">
-          <span>Monthly payments</span>
+          <span>Monthly obligation</span>
           <strong>{formatINR(monthlyPayments)}</strong>
-          <small>EMIs, minimums and estimated interest</small>
+          <small>EMIs and interest per month</small>
         </div>
         <div className="debt-stat">
-          <span>Next payment</span>
-          <strong>{nextDue ? formatINR(monthlyObligation(nextDue)) : '—'}</strong>
-          <small>{nextDue ? `${nextDue.name} · ${dueLabel(nextDue.displayDue, today)}` : 'No upcoming due dates'}</small>
+          <span>This month ({currentMonthName})</span>
+          <strong>{paidDebtsThisMonth.length} of {activeDebts.length} paid</strong>
+          <small>
+            {paidDebtsThisMonth.length === activeDebts.length && activeDebts.length > 0
+              ? 'All debts paid for this month! 🎉'
+              : `${formatINR(totalPaidThisMonth)} paid · ${formatINR(pendingObligationThisMonth)} pending`}
+          </small>
         </div>
       </section>
 
@@ -1023,6 +1066,11 @@ export default function DebtTracker({
               ? Math.min(100, Math.max(0, ((debt.originalAmount - debt.balance) / debt.originalAmount) * 100))
               : 0
             const debtPayments = (paymentByDebt.get(debt.id) || []).sort((a, b) => b.date.localeCompare(a.date))
+            const thisMonthPayments = debtPayments.filter((p) => p.date && p.date.slice(0, 7) === currentMonthKey)
+            const thisMonthTotal = thisMonthPayments.reduce((sum, p) => sum + (p.amount || 0), 0)
+            const isPaidThisMonth = thisMonthPayments.length > 0
+            const isOverdue = Boolean(debt.nextDue && debt.nextDue < today && !isPaid && !isPaidThisMonth)
+
             return (
               <article className={`debt-card${isPaid ? ' debt-card-paid' : ''}`} key={debt.id} style={{ animationDelay: `${Math.min(index, 8) * 35}ms` }}>
                 <div className="debt-card-top">
@@ -1033,18 +1081,24 @@ export default function DebtTracker({
                       <p>{[debt.lender, debt.category].filter(Boolean).join(' · ') || 'Uncategorized debt'}</p>
                     </div>
                   </div>
-                  <span className={`debt-due${debt.nextDue && debt.nextDue < today && !isPaid ? ' overdue' : ''}${isPaid ? ' paid' : ''}`}>
-                    {isPaid ? 'Paid off' : dueLabel(debt.nextDue || debt.nextInterestDue, today)}
-                  </span>
+                  {isPaid ? (
+                    <span className="debt-due paid">Paid off</span>
+                  ) : isPaidThisMonth ? (
+                    <span className="debt-due this-month-paid">✓ Paid for {currentMonthName}</span>
+                  ) : (
+                    <span className={`debt-due${isOverdue ? ' overdue' : ''}`}>
+                      {dueLabel(debt.nextDue || debt.nextInterestDue, today)}
+                    </span>
+                  )}
                 </div>
 
                 <div className="debt-card-balance">
                   <div>
-                    <span>Remaining</span>
+                    <span>Remaining balance</span>
                     <strong>{formatINR(debt.balance)}</strong>
                   </div>
                   <div className="debt-original">
-                    <span>Original</span>
+                    <span>Original loan</span>
                     <strong>{formatINR(debt.originalAmount)}</strong>
                   </div>
                 </div>
@@ -1052,25 +1106,65 @@ export default function DebtTracker({
                 <div className="debt-progress" role="progressbar" aria-label={`${debt.name} paid off`} aria-valuenow={Math.round(progress)} aria-valuemin="0" aria-valuemax="100">
                   <span style={{ width: `${progress}%` }} />
                 </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.73rem', color: 'var(--muted)', marginTop: '0.25rem' }}>
+                  <span>{Math.round(progress)}% repaid ({formatINR(debt.principalPaid || Math.max(0, debt.originalAmount - debt.balance))})</span>
+                  <span>{formatINR(debt.balance)} remaining</span>
+                </div>
+
+                {!isPaid ? (
+                  <div className={`debt-month-indicator ${isPaidThisMonth ? 'paid' : isOverdue ? 'overdue' : 'pending'}`}>
+                    <span className="debt-month-icon">{isPaidThisMonth ? '✓' : isOverdue ? '⚠️' : '⏳'}</span>
+                    <div className="debt-month-text">
+                      {isPaidThisMonth ? (
+                        <>
+                          <strong>Paid for {currentMonthName}</strong> · {formatINR(thisMonthTotal)} recorded {thisMonthPayments.length > 1 ? `across ${thisMonthPayments.length} payments` : `on ${formatShortDate(thisMonthPayments[0].date)}`}
+                        </>
+                      ) : isOverdue ? (
+                        <>
+                          <strong>Overdue for {currentMonthName}</strong> · {monthlyObligation(debt) ? `${formatINR(monthlyObligation(debt))} EMI was due on ${formatShortDate(debt.nextDue)}` : 'Payment overdue'}
+                        </>
+                      ) : (
+                        <>
+                          <strong>Pending for {currentMonthName}</strong> · {monthlyObligation(debt) ? `${formatINR(monthlyObligation(debt))} EMI due${debt.nextDue ? ` on ${formatShortDate(debt.nextDue)}` : ''}` : 'Payment not recorded yet'}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="debt-card-facts">
                   <span>{monthlyObligation(debt) ? `${formatINR(monthlyObligation(debt))} / month` : 'No payment listed'}</span>
-                  <span>{debt.monthlyRate != null ? `${debt.monthlyRate}% / month` : debt.rate != null ? `${debt.rate}% annual` : 'Rate not set'}</span>
-                  <span>{(() => {
-                    const monthsLeft = calculateRemainingMonths(debt, today)
-                    return monthsLeft != null ? `${monthsLeft} ${monthsLeft === 1 ? 'month' : 'months'} left` : (debt.monthsRemaining != null ? `${debt.monthsRemaining} months left` : 'Term not set')
-                  })()}</span>
+                  <span>{debt.monthlyRate != null ? `${debt.monthlyRate}% / month` : debt.rate != null ? `${debt.rate}% annual` : '0% interest'}</span>
+                  <span>{formatRemainingTenure(debt, today)}</span>
                 </div>
 
                 <div className="debt-card-footer">
                   <div className="debt-payment-preview">
-                    {debtPayments.length
-                      ? <><strong>{debtPayments.length} payment{debtPayments.length === 1 ? '' : 's'}</strong><span>Last · {formatShortDate(debtPayments[0].date)}</span></>
-                      : <span>No payments recorded yet</span>}
+                    {debtPayments.length ? (
+                      <>
+                        <strong>{debtPayments.length} payment{debtPayments.length === 1 ? '' : 's'} recorded</strong>
+                        <span>Last · {formatShortDate(debtPayments[0].date)}</span>
+                      </>
+                    ) : (debt.principalPaid > 0 || debt.interestPaid > 0) ? (
+                      <>
+                        <strong>{formatINR(debt.principalPaid || 0)} repaid</strong>
+                        <span>{debt.interestPaid > 0 ? `· ${formatINR(debt.interestPaid)} interest paid` : 'Prior to tracker'}</span>
+                      </>
+                    ) : (
+                      <span>No payments recorded yet</span>
+                    )}
                   </div>
                   <div className="debt-card-actions">
                     <button type="button" className="text-btn" onClick={() => setEditingDebt(debt)}>Edit</button>
-                    {!isPaid ? <button type="button" className="btn btn-secondary debt-pay-btn" onClick={() => setPaymentDebt(debt)}>{linkedSchedule ? 'Record extra payment' : 'Record payment'}</button> : null}
+                    {!isPaid ? (
+                      <button
+                        type="button"
+                        className={`btn ${isPaidThisMonth ? 'btn-secondary' : 'btn-primary'} debt-pay-btn`}
+                        onClick={() => setPaymentDebt(debt)}
+                      >
+                        {isPaidThisMonth ? '+ Extra payment' : (linkedSchedule ? 'Record extra payment' : 'Record payment')}
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               </article>
