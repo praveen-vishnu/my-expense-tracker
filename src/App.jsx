@@ -54,6 +54,8 @@ export default function App() {
     upsertExpense,
     deleteExpense,
     saveDebt,
+    deleteDebt,
+    clearAllDebts,
     recordDebtPayment,
     importDebts,
     importBatchExpenses,
@@ -387,6 +389,8 @@ export default function App() {
             payments={data.debtPayments || []}
             recurringExpenses={data.recurringExpenses || []}
             onSaveDebt={saveDebt}
+            onDeleteDebt={deleteDebt}
+            onClearAllDebts={clearAllDebts}
             onRecordPayment={recordDebtPayment}
             onImportDebts={importDebts}
           />

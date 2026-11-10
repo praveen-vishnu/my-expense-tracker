@@ -27,7 +27,7 @@ function debtFormValues(debt) {
   )
 }
 
-function DebtForm({ initial, onSave, onCancel }) {
+function DebtForm({ initial, onSave, onDelete, onCancel }) {
   const [values, setValues] = useState(() => debtFormValues(initial))
   const [error, setError] = useState('')
   const nameRef = useRef(null)
@@ -212,9 +212,26 @@ function DebtForm({ initial, onSave, onCancel }) {
           </label>
         </div>
         {error ? <p className="debt-form-error" role="alert">{error}</p> : null}
-        <div className="debt-form-actions">
-          <button type="button" className="btn btn-secondary" onClick={onCancel}>Cancel</button>
-          <button type="submit" className="btn btn-primary">{isEditing ? 'Save changes' : 'Add debt'}</button>
+        <div className="debt-form-actions" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          {isEditing && onDelete ? (
+            <button
+              type="button"
+              className="text-btn"
+              style={{ color: '#e53e3e', padding: '0.4rem 0.6rem', fontWeight: 600 }}
+              onClick={() => {
+                if (window.confirm(`Are you sure you want to delete "${initial.name}"? This will also remove its payment history.`)) {
+                  onDelete(initial.id)
+                  onCancel()
+                }
+              }}
+            >
+              🗑️ Delete debt
+            </button>
+          ) : <span />}
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button type="button" className="btn btn-secondary" onClick={onCancel}>Cancel</button>
+            <button type="submit" className="btn btn-primary">{isEditing ? 'Save changes' : 'Add debt'}</button>
+          </div>
         </div>
       </form>
     </ModalSheet>
@@ -494,6 +511,7 @@ function monthlyObligation(debt) {
 
 function DebtImportPreviewModal({ items, onConfirm, onCancel, today }) {
   const [debts, setDebts] = useState(items)
+  const [overwriteAll, setOverwriteAll] = useState(false)
 
   const selectedDebts = debts.filter((d) => d.selected)
   const newCount = debts.filter((d) => !d.isDuplicate).length
@@ -534,8 +552,8 @@ function DebtImportPreviewModal({ items, onConfirm, onCancel, today }) {
           </div>
           {duplicateCount > 0 ? (
             <div>
-              <span style={{ background: 'rgba(237,137,54,0.15)', color: '#c05621', padding: '0.2rem 0.55rem', borderRadius: '6px', fontWeight: 600, fontSize: '0.82rem' }}>
-                {duplicateCount} already in tracker
+              <span style={{ background: 'rgba(59,130,246,0.15)', color: '#2563eb', padding: '0.2rem 0.55rem', borderRadius: '6px', fontWeight: 600, fontSize: '0.82rem' }}>
+                {duplicateCount} will update existing
               </span>
             </div>
           ) : null}
@@ -600,8 +618,8 @@ function DebtImportPreviewModal({ items, onConfirm, onCancel, today }) {
                     </td>
                     <td>
                       {item.isDuplicate ? (
-                        <span style={{ fontSize: '0.74rem', padding: '0.2rem 0.45rem', borderRadius: '4px', background: 'rgba(237,137,54,0.15)', color: '#c05621', fontWeight: 600 }}>
-                          Existing
+                        <span style={{ fontSize: '0.74rem', padding: '0.2rem 0.45rem', borderRadius: '4px', background: 'rgba(59,130,246,0.15)', color: '#2563eb', fontWeight: 600 }}>
+                          Will update
                         </span>
                       ) : (
                         <span style={{ fontSize: '0.74rem', padding: '0.2rem 0.45rem', borderRadius: '4px', background: 'rgba(72,187,120,0.15)', color: '#276749', fontWeight: 600 }}>
@@ -616,18 +634,28 @@ function DebtImportPreviewModal({ items, onConfirm, onCancel, today }) {
           </table>
         </div>
 
-        <div className="debt-form-actions" style={{ marginTop: '1.2rem', display: 'flex', justifyContent: 'flex-end', gap: '0.6rem' }}>
-          <button type="button" className="btn btn-secondary" onClick={onCancel}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={selectedDebts.length === 0}
-            onClick={() => onConfirm(selectedDebts)}
-          >
-            Import {selectedDebts.length} {selectedDebts.length === 1 ? 'Debt' : 'Debts'} into Tracker
-          </button>
+        <div className="debt-form-actions" style={{ marginTop: '1.2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer', margin: 0 }}>
+            <input
+              type="checkbox"
+              checked={overwriteAll}
+              onChange={(e) => setOverwriteAll(e.target.checked)}
+            />
+            <span>Replace all current debts (fresh start)</span>
+          </label>
+          <div style={{ display: 'flex', gap: '0.6rem' }}>
+            <button type="button" className="btn btn-secondary" onClick={onCancel}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={selectedDebts.length === 0}
+              onClick={() => onConfirm(selectedDebts, { overwrite: overwriteAll })}
+            >
+              {overwriteAll ? `Replace Tracker with ${selectedDebts.length} Debts` : `Import ${selectedDebts.length} ${selectedDebts.length === 1 ? 'Debt' : 'Debts'}`}
+            </button>
+          </div>
         </div>
       </div>
     </ModalSheet>
@@ -732,7 +760,7 @@ function DebtImportModal({ onDismiss, onFileParsed, existingDebts = [] }) {
           ...d,
           monthsRemaining: autoMonths != null ? autoMonths : d.monthsRemaining,
           isDuplicate: existingIds.has(d.id),
-          selected: !existingIds.has(d.id),
+          selected: true,
         }
       })
       onFileParsed(previewList)
@@ -912,6 +940,8 @@ export default function DebtTracker({
   payments = [],
   recurringExpenses = [],
   onSaveDebt,
+  onDeleteDebt,
+  onClearAllDebts,
   onRecordPayment,
   onImportDebts,
 }) {
@@ -980,11 +1010,11 @@ export default function DebtTracker({
       .map((schedule) => [schedule.debtId, schedule])
   ), [recurringExpenses])
 
-  function handleConfirmImport(selectedDebts) {
-    const result = onImportDebts(selectedDebts)
+  function handleConfirmImport(selectedDebts, options) {
+    const result = onImportDebts(selectedDebts, options)
     setPreviewDebts(null)
     setFeedback(result.ok
-      ? `Imported ${result.imported} debts${result.skipped ? ` · skipped ${result.skipped} duplicates or invalid records` : ''}.`
+      ? `Successfully saved ${result.imported} debts${options?.overwrite ? ' (replaced all debts)' : ''}${result.skipped ? ` · skipped ${result.skipped} invalid records` : ''}.`
       : result.error)
   }
 
@@ -1021,6 +1051,21 @@ export default function DebtTracker({
           ) : null}
           <button type="button" className="btn btn-secondary" onClick={() => setImportModalOpen(true)}>Import Debts</button>
           <button type="button" className="btn btn-primary" onClick={() => setEditingDebt({})}>+ Add debt</button>
+          {debts.length > 0 && onClearAllDebts ? (
+            <button
+              type="button"
+              className="text-btn"
+              style={{ color: '#e53e3e', fontSize: '0.82rem', padding: '0.4rem 0.6rem' }}
+              onClick={() => {
+                if (window.confirm('Are you sure you want to delete all debts and payment history from the tracker? This action cannot be undone.')) {
+                  onClearAllDebts()
+                  setFeedback('All debts have been cleared. You can now add or import fresh records.')
+                }
+              }}
+            >
+              Clear all debts
+            </button>
+          ) : null}
         </div>
       </header>
 
@@ -1207,6 +1252,7 @@ export default function DebtTracker({
         <DebtForm
           initial={editingDebt.id ? editingDebt : null}
           onSave={onSaveDebt}
+          onDelete={onDeleteDebt}
           onCancel={() => setEditingDebt(null)}
         />
       ) : null}

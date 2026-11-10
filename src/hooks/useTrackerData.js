@@ -315,18 +315,86 @@ export function useTrackerData(authReady, authUser, month) {
     return { ok: true }
   }, [])
 
-  const importDebts = useCallback((input) => {
+  const deleteDebt = useCallback((debtId) => {
+    if (!debtId) return
+    enqueueMutation({ table: 'debts', id: debtId, op: 'delete' })
+    const paymentsToDelete = (dataRef.current?.debtPayments || []).filter((p) => p.debtId === debtId)
+    for (const p of paymentsToDelete) {
+      enqueueMutation({ table: 'debt_payments', id: p.id, op: 'delete' })
+    }
+    const schedulesToUpdate = (dataRef.current?.recurringExpenses || []).filter((s) => s.debtId === debtId)
+    for (const s of schedulesToUpdate) {
+      const unlinked = { ...s, debtId: null }
+      enqueueMutation({ table: 'recurring_schedules', id: s.id, op: 'upsert', payload: unlinked })
+    }
+
+    setData((current) => {
+      const next = {
+        ...current,
+        debts: (current.debts || []).filter((d) => d.id !== debtId),
+        debtPayments: (current.debtPayments || []).filter((p) => p.debtId !== debtId),
+        recurringExpenses: (current.recurringExpenses || []).map((s) => s.debtId === debtId ? { ...s, debtId: null } : s),
+      }
+      dataRef.current = next
+      return next
+    })
+  }, [])
+
+  const clearAllDebts = useCallback(() => {
+    for (const debt of dataRef.current?.debts || []) {
+      enqueueMutation({ table: 'debts', id: debt.id, op: 'delete' })
+    }
+    for (const p of dataRef.current?.debtPayments || []) {
+      enqueueMutation({ table: 'debt_payments', id: p.id, op: 'delete' })
+    }
+    const schedulesToUpdate = (dataRef.current?.recurringExpenses || []).filter((s) => s.debtId)
+    for (const s of schedulesToUpdate) {
+      const unlinked = { ...s, debtId: null }
+      enqueueMutation({ table: 'recurring_schedules', id: s.id, op: 'upsert', payload: unlinked })
+    }
+
+    setData((current) => {
+      const next = {
+        ...current,
+        debts: [],
+        debtPayments: [],
+        recurringExpenses: (current.recurringExpenses || []).map((s) => s.debtId ? { ...s, debtId: null } : s),
+      }
+      dataRef.current = next
+      return next
+    })
+  }, [])
+
+  const importDebts = useCallback((input, { overwrite = false } = {}) => {
     const result = parseDebtImport(input)
     if (!result.ok) return result
-    const currentIds = new Set((dataRef.current?.debts || []).map((debt) => debt.id))
-    const additions = result.debts.filter((debt) => !currentIds.has(debt.id))
-    for (const debt of additions) {
+
+    if (overwrite) {
+      for (const debt of dataRef.current?.debts || []) {
+        enqueueMutation({ table: 'debts', id: debt.id, op: 'delete' })
+      }
+      for (const debt of result.debts) {
+        enqueueMutation({ table: 'debts', id: debt.id, op: 'upsert', payload: debt })
+      }
+      setData((current) => {
+        const next = { ...current, debts: result.debts }
+        dataRef.current = next
+        return next
+      })
+      return { ok: true, imported: result.debts.length, skipped: result.skipped }
+    }
+
+    for (const debt of result.debts) {
       enqueueMutation({ table: 'debts', id: debt.id, op: 'upsert', payload: debt })
     }
-    if (additions.length) {
-      setData((current) => ({ ...current, debts: [...additions, ...(current.debts || [])] }))
-    }
-    return { ok: true, imported: additions.length, skipped: result.skipped + result.debts.length - additions.length }
+    setData((current) => {
+      const incomingIds = new Set(result.debts.map((d) => d.id))
+      const untouched = (current.debts || []).filter((d) => !incomingIds.has(d.id))
+      const next = { ...current, debts: [...result.debts, ...untouched] }
+      dataRef.current = next
+      return next
+    })
+    return { ok: true, imported: result.debts.length, skipped: result.skipped }
   }, [])
 
   const importBatchExpenses = useCallback((newExpenses) => {
@@ -921,6 +989,8 @@ export function useTrackerData(authReady, authUser, month) {
     upsertExpense,
     deleteExpense,
     saveDebt,
+    deleteDebt,
+    clearAllDebts,
     recordDebtPayment,
     importDebts,
     importBatchExpenses,
