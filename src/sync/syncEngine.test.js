@@ -372,3 +372,120 @@ test('pushOutbox transitions status to error and retains outbox on failure', asy
 
   await clearOutbox()
 })
+
+test('pushOutbox self-heals missing schema column (PGRST204) by stripping missing column and retrying', async () => {
+  await clearOutbox()
+
+  await enqueueMutation({
+    table: 'recurring_schedules',
+    id: 'rec_emi_1',
+    op: 'upsert',
+    payload: {
+      id: 'rec_emi_1',
+      name: 'Personal Loan EMI',
+      amount: 15270,
+      category: 'Loan / EMI',
+      day: 5,
+      startMonth: '2026-01',
+      kind: 'emi',
+      debtId: 'debt_loan_1',
+    },
+  })
+
+  let attempts = 0
+  let receivedPayload = null
+
+  const fakeSupabase = {
+    from(table) {
+      assert.equal(table, 'recurring_schedules')
+      return {
+        upsert(rows) {
+          attempts++
+          if (attempts === 1) {
+            // First attempt: remote Supabase rejects because debt_id column is not in schema cache
+            assert.equal('debt_id' in rows[0], true)
+            return Promise.resolve({
+              error: {
+                code: 'PGRST204',
+                message: "Could not find the 'debt_id' column of 'recurring_schedules' in the schema cache",
+              },
+            })
+          }
+          // Second attempt: self-healing stripped debt_id
+          receivedPayload = rows[0]
+          return Promise.resolve({ error: null })
+        },
+      }
+    },
+  }
+
+  const result = await pushOutbox(fakeSupabase, 'user_123')
+  assert.equal(result.success, true)
+  assert.equal(attempts, 2)
+  assert.equal(receivedPayload.debt_id, undefined)
+  assert.equal(receivedPayload.amount, 15270)
+
+  const pending = await getPendingMutations()
+  assert.equal(pending.length, 0)
+
+  const status = getSyncStatus()
+  assert.equal(status.state, 'synced')
+  assert.equal(status.pendingCount, 0)
+
+  await clearOutbox()
+})
+
+test('pushOutbox self-heals foreign key violation by nullifying debt_id, account_id and recurring_id', async () => {
+  await clearOutbox()
+
+  await enqueueMutation({
+    table: 'recurring_schedules',
+    id: 'rec_fk_1',
+    op: 'upsert',
+    payload: {
+      id: 'rec_fk_1',
+      name: 'Car EMI',
+      amount: 5000,
+      category: 'EMI',
+      day: 10,
+      startMonth: '2026-01',
+      kind: 'emi',
+      debtId: 'missing_debt_id',
+      accountId: 'missing_acc_id',
+    },
+  })
+
+  let attempts = 0
+  let receivedPayload = null
+
+  const fakeSupabase = {
+    from() {
+      return {
+        upsert(rows) {
+          attempts++
+          if (attempts === 1) {
+            return Promise.resolve({
+              error: {
+                code: '23503',
+                message: 'insert or update on table "recurring_schedules" violates foreign key constraint',
+              },
+            })
+          }
+          receivedPayload = rows[0]
+          return Promise.resolve({ error: null })
+        },
+      }
+    },
+  }
+
+  const result = await pushOutbox(fakeSupabase, 'user_123')
+  assert.equal(result.success, true)
+  assert.equal(attempts, 2)
+  assert.equal(receivedPayload.debt_id, null)
+  assert.equal(receivedPayload.account_id, null)
+
+  const pending = await getPendingMutations()
+  assert.equal(pending.length, 0)
+
+  await clearOutbox()
+})

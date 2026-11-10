@@ -261,10 +261,22 @@ export default function App() {
               onClick={() => {
                 if (syncStatus === 'error' && syncInfo?.errorMessage) {
                   alert(`Sync Error: ${syncInfo.errorMessage}`)
+                } else if (syncStatus === 'pending') {
+                  retrySync()
                 }
               }}
-              style={syncStatus === 'error' ? { cursor: 'pointer', textDecoration: 'underline dotted' } : {}}
-              title={syncStatus === 'error' ? (syncInfo?.errorMessage || 'Tap to see error') : undefined}
+              style={
+                syncStatus === 'error' || syncStatus === 'pending'
+                  ? { cursor: 'pointer', textDecoration: 'underline dotted' }
+                  : {}
+              }
+              title={
+                syncStatus === 'error'
+                  ? syncInfo?.errorMessage || 'Tap to see error'
+                  : syncStatus === 'pending'
+                    ? `${syncInfo?.pendingCount || 1} change(s) waiting to sync. Click to sync now.`
+                    : undefined
+              }
             >
               {syncStatus === 'cloud' || syncStatus === 'synced'
                 ? 'Saved to cloud'
@@ -278,14 +290,14 @@ export default function App() {
                         ? 'Checking sync...'
                         : 'Saved on this device'}
             </span>
-            {syncStatus === 'error' && (
+            {(syncStatus === 'error' || syncStatus === 'pending') && (
               <button
                 type="button"
                 className="sync-retry-btn"
                 onClick={retrySync}
-                title={syncInfo?.errorMessage || 'Retry sync'}
+                title={syncStatus === 'error' ? syncInfo?.errorMessage || 'Retry sync' : 'Sync pending changes now'}
               >
-                Retry
+                {syncStatus === 'error' ? 'Retry' : 'Sync now'}
               </button>
             )}
           </small>

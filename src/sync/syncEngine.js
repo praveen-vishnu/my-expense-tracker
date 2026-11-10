@@ -107,10 +107,31 @@ export async function pushOutbox(supabase, userId) {
 
       // 1. Process Upserts
       if (upserts.length > 0) {
-        const rows = upserts.map((u) => u.row)
+        let rows = upserts.map((u) => u.row)
         let { error } = await supabase
           .from(table)
           .upsert(rows, { onConflict: config.primaryKey })
+
+        // Self-healing for missing column in remote schema cache (e.g. PGRST204 / "Could not find the 'col' column ... in the schema cache")
+        // Strips the unmigrated column from rows so the core record can sync without staying stuck in outbox.
+        let missingColRetries = 0
+        while (
+          error &&
+          missingColRetries < 3 &&
+          (error.code === 'PGRST204' || (error.message?.includes('column') && error.message?.includes('schema cache')))
+        ) {
+          missingColRetries++
+          const match = error.message?.match(/Could not find the '([^']+)' column/i)
+          const missingCol = match ? match[1] : null
+          if (!missingCol) break
+
+          console.warn(`Column "${missingCol}" not found in Supabase table "${table}". Retrying upsert without it...`)
+          rows.forEach((r) => {
+            delete r[missingCol]
+          })
+          const retryRes = await supabase.from(table).upsert(rows, { onConflict: config.primaryKey })
+          error = retryRes.error
+        }
 
         // Self-healing for check constraint violation (e.g. incomes_amount_check / budgets_amount_check)
         if (error && (error.code === '23514' || error.message?.includes('check constraint') || error.message?.includes('_amount_check'))) {
@@ -124,16 +145,15 @@ export async function pushOutbox(supabase, userId) {
           }
         }
 
-        // Self-healing for foreign key violation: if an expense, income or recurring references an account that was deleted or missing remotely,
-        // retry the upsert with account_id = null rather than permanently blocking the outbox.
+        // Self-healing for foreign key violation: if an expense, income or recurring references an account/debt that was deleted or missing remotely,
+        // retry the upsert with nullified foreign keys rather than permanently blocking the outbox.
         if (error && (error.code === '23503' || error.message?.includes('violates foreign key constraint'))) {
-          console.warn(`Foreign key violation on ${table}. Retrying upsert with nullified account_id...`, error)
+          console.warn(`Foreign key violation on ${table}. Retrying upsert with nullified foreign keys...`, error)
           const sanitizedRows = rows.map((r) => {
             const next = { ...r }
             if ('account_id' in next) next.account_id = null
-            if ('from_account_id' in next && 'to_account_id' in next) {
-              // If transfer fails FK, we cannot just nullify required FKs, skip
-            }
+            if ('debt_id' in next) next.debt_id = null
+            if ('recurring_id' in next) next.recurring_id = null
             return next
           })
           const retryRes = await supabase.from(table).upsert(sanitizedRows, { onConflict: config.primaryKey })
@@ -141,7 +161,7 @@ export async function pushOutbox(supabase, userId) {
         }
 
         if (error) {
-          if (error.code === 'PGRST205' || error.message?.includes('schema cache')) {
+          if (error.code === 'PGRST205' || (error.message?.includes('table') && error.message?.includes('schema cache'))) {
             console.warn(`Table "${table}" not found in Supabase schema cache. Run the required Supabase schema migrations.`)
             continue // Keep in outbox, continue with other tables
           }
@@ -164,7 +184,7 @@ export async function pushOutbox(supabase, userId) {
 
           const { error } = await query
           if (error) {
-            if (error.code === 'PGRST205' || error.message?.includes('schema cache')) {
+            if (error.code === 'PGRST205' || (error.message?.includes('table') && error.message?.includes('schema cache'))) {
               console.warn(`Table "${table}" not found in Supabase schema cache.`)
               continue
             }
@@ -230,7 +250,7 @@ export async function deltaPull(supabase, userId, onRemoteChanges) {
           .range(offset, offset + PAGE_SIZE - 1)
 
         if (error) {
-          if (error.code === 'PGRST205' || error.message?.includes('schema cache')) {
+          if (error.code === 'PGRST205' || (error.message?.includes('table') && error.message?.includes('schema cache'))) {
             console.warn(`Table "${table}" not found in Supabase schema cache. Run the required Supabase schema migrations.`)
             break
           }
