@@ -4773,13 +4773,121 @@ h2 {
   flex-shrink: 0;
 }
 
+.debt-freedom-banner {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  padding: 1.25rem 1.6rem;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(35, 78, 82, 0.22) 0%, rgba(40, 94, 98, 0.1) 100%);
+  border: 1px solid rgba(56, 178, 172, 0.35);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.04);
+}
+
+.debt-freedom-banner.all-clear {
+  background: linear-gradient(135deg, rgba(46, 133, 64, 0.22) 0%, rgba(39, 103, 73, 0.12) 100%);
+  border-color: rgba(72, 187, 120, 0.35);
+}
+
+.debt-freedom-content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.debt-freedom-icon {
+  font-size: 1.9rem;
+  line-height: 1;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 3.2rem;
+  height: 3.2rem;
+  border-radius: 14px;
+  background: rgba(56, 178, 172, 0.16);
+  border: 1px solid rgba(56, 178, 172, 0.3);
+}
+
+.debt-freedom-banner.all-clear .debt-freedom-icon {
+  background: rgba(72, 187, 120, 0.16);
+  border-color: rgba(72, 187, 120, 0.3);
+}
+
+.debt-freedom-eyebrow {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--brand, #38a169);
+  margin-bottom: 0.2rem;
+}
+
+.debt-freedom-content h3 {
+  margin: 0;
+  font-size: 1.22rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.debt-freedom-content p {
+  margin: 0.2rem 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.debt-freedom-progress-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 220px;
+  flex: 1;
+  max-width: 340px;
+}
+
+.debt-freedom-progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.debt-freedom-progress-label strong {
+  color: var(--text);
+  font-family: var(--mono);
+}
+
+.debt-freedom-progress-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--border, rgba(0, 0, 0, 0.08));
+  overflow: hidden;
+}
+
+.debt-freedom-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #38a169 0%, #319795 100%);
+  transition: width 0.4s ease;
+}
+
+.debt-freedom-progress-wrap small {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
 .debt-overview {
   position: relative;
   overflow: hidden;
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) 1px minmax(0, 0.85fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.15fr) 1px minmax(0, 0.75fr) minmax(0, 0.85fr) minmax(0, 0.95fr);
   align-items: center;
-  gap: 1.25rem;
+  gap: 1.1rem;
   padding: clamp(1.25rem, 3vw, 2rem);
   color: #f2f5ee;
   background:
@@ -4842,6 +4950,151 @@ h2 {
   width: 1px;
   height: 3.4rem;
   background: rgb(255 255 255 / 0.2);
+}
+
+.debt-strategy-box {
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  border-radius: 18px;
+  padding: 1.25rem 1.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.95rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
+}
+
+.debt-strategy-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.debt-strategy-head h3 {
+  margin: 0.12rem 0 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.debt-strategy-toggle {
+  display: flex;
+  background: var(--surface-bg, rgba(0, 0, 0, 0.05));
+  padding: 3px;
+  border-radius: 12px;
+  gap: 2px;
+}
+
+.strategy-btn {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.45rem 0.8rem;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.strategy-btn small {
+  opacity: 0.75;
+  font-weight: 400;
+}
+
+.strategy-btn.active {
+  background: var(--card-bg, #fff);
+  color: var(--text);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.debt-strategy-desc {
+  margin: 0;
+  font-size: 0.83rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.debt-strategy-desc strong {
+  color: var(--text);
+}
+
+.debt-strategy-steps {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  padding-top: 0.55rem;
+  border-top: 1px dashed var(--border, rgba(0, 0, 0, 0.08));
+}
+
+.debt-strategy-steps-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.debt-strategy-pills {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.strategy-step-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.28rem 0.6rem;
+  border-radius: 9px;
+  background: var(--surface-bg, rgba(0, 0, 0, 0.04));
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.06));
+  font-size: 0.77rem;
+  color: var(--text);
+}
+
+.strategy-step-pill.target-priority {
+  background: rgba(229, 62, 62, 0.08);
+  border-color: rgba(229, 62, 62, 0.35);
+  color: #e53e3e;
+  font-weight: 700;
+}
+
+.strategy-step-pill .step-num {
+  font-size: 0.66rem;
+  font-weight: 800;
+  opacity: 0.7;
+}
+
+.strategy-step-pill .step-name {
+  font-weight: 600;
+}
+
+.strategy-step-pill .step-metric {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  opacity: 0.85;
+}
+
+.debt-priority-target-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: rgba(229, 62, 62, 0.1);
+  color: #e53e3e;
+  border: 1px solid rgba(229, 62, 62, 0.25);
 }
 
 .debt-section-heading {
@@ -5295,6 +5548,35 @@ h2 {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+:root[data-theme='dark'] .debt-freedom-banner {
+  background: linear-gradient(135deg, rgba(29, 68, 62, 0.45) 0%, rgba(35, 75, 68, 0.25) 100%);
+  border-color: rgba(56, 178, 172, 0.35);
+}
+
+:root[data-theme='dark'] .debt-freedom-banner.all-clear {
+  background: linear-gradient(135deg, rgba(35, 80, 50, 0.45) 0%, rgba(28, 68, 42, 0.25) 100%);
+  border-color: rgba(72, 187, 120, 0.4);
+}
+
+:root[data-theme='dark'] .debt-strategy-box {
+  background: linear-gradient(180deg, #25312c, #202a26);
+  border-color: var(--line);
+}
+
+:root[data-theme='dark'] .debt-strategy-toggle {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+:root[data-theme='dark'] .strategy-btn.active {
+  background: #2b3933;
+  color: #f0fdf4;
+}
+
+:root[data-theme='dark'] .strategy-step-pill {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.08);
 }
 
 :root[data-theme='dark'] .debt-overview {

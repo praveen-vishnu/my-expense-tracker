@@ -403,6 +403,7 @@ export default function App() {
             accounts={data.accounts || []}
             categories={data.categories || []}
             month={month}
+            monthlyIncome={summary.income || 0}
             onSaveDebt={saveDebt}
             onDeleteDebt={deleteDebt}
             onClearAllDebts={clearAllDebts}

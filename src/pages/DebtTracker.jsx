@@ -1,7 +1,18 @@
 import { useMemo, useRef, useState } from 'react'
 import ModalSheet from '../components/ModalSheet.jsx'
 import { createId, formatINR, formatShortDate, isValidDate, parseAmount, todayISO } from '../utils/formatting.js'
-import { calculatePaymentSplit, calculateRemainingBalance, calculateRemainingMonths, formatRemainingTenure, parseDebtImport, parseCSV, parseExcel } from '../utils/debts.js'
+import {
+  calculateDebtFreeDate,
+  calculateDtiRatio,
+  calculatePaymentSplit,
+  calculateRemainingBalance,
+  calculateRemainingMonths,
+  formatRemainingTenure,
+  getRepaymentStrategies,
+  parseDebtImport,
+  parseCSV,
+  parseExcel,
+} from '../utils/debts.js'
 
 function blankDebt() {
   return {
@@ -1066,6 +1077,7 @@ export default function DebtTracker({
   accounts = [],
   categories = [],
   month = todayISO().slice(0, 7),
+  monthlyIncome = 0,
   onSaveDebt,
   onDeleteDebt,
   onClearAllDebts,
@@ -1078,6 +1090,7 @@ export default function DebtTracker({
   const [previewDebts, setPreviewDebts] = useState(null)
   const [importModalOpen, setImportModalOpen] = useState(false)
   const [feedback, setFeedback] = useState('')
+  const [strategyMode, setStrategyMode] = useState('avalanche')
   const today = todayISO()
   const currentMonthKey = today.slice(0, 7)
   const currentMonthName = new Date(today + 'T00:00:00').toLocaleString('en-US', { month: 'short' })
@@ -1090,6 +1103,11 @@ export default function DebtTracker({
     })
   }, [debts])
   const activeDebts = useMemo(() => uniqueDebts.filter((debt) => debt.status !== 'paid' && debt.balance > 0), [uniqueDebts])
+
+  const debtFreeInfo = useMemo(() => calculateDebtFreeDate(uniqueDebts, today), [uniqueDebts, today])
+  const strategies = useMemo(() => getRepaymentStrategies(uniqueDebts), [uniqueDebts])
+  const activeStrategyList = strategyMode === 'snowball' ? strategies.snowball : strategies.avalanche
+  const priorityTargetDebtId = activeStrategyList[0]?.id || null
 
   function handleCreateRecurringFromDebt(debt) {
     if (!onAddRecurringExpense) return
@@ -1125,6 +1143,7 @@ export default function DebtTracker({
   }
   const totalBalance = activeDebts.reduce((sum, debt) => sum + debt.balance, 0)
   const monthlyPayments = activeDebts.reduce((sum, debt) => sum + monthlyObligation(debt), 0)
+  const dti = useMemo(() => calculateDtiRatio(monthlyPayments, monthlyIncome), [monthlyPayments, monthlyIncome])
 
   const paymentByDebt = useMemo(() => {
     const map = new Map()
@@ -1264,6 +1283,53 @@ export default function DebtTracker({
         </div>
       </header>
 
+      {/* P1: Projected Debt-Free Countdown Hero Banner */}
+      {uniqueDebts.length > 0 ? (
+        <section className={`debt-freedom-banner ${debtFreeInfo.isDebtFree ? 'all-clear' : ''}`} aria-label="Debt Freedom Projection">
+          <div className="debt-freedom-content">
+            <div className="debt-freedom-icon" aria-hidden="true">
+              {debtFreeInfo.isDebtFree ? '🎉' : '🎯'}
+            </div>
+            <div>
+              <span className="debt-freedom-eyebrow">
+                {debtFreeInfo.isDebtFree ? 'Financial Freedom Achieved' : 'Projected Debt Freedom'}
+              </span>
+              <h3>
+                {debtFreeInfo.isDebtFree
+                  ? 'You are 100% Debt-Free!'
+                  : `Debt-Free by ${debtFreeInfo.formattedDate}`}
+              </h3>
+              <p>
+                {debtFreeInfo.isDebtFree
+                  ? 'All liabilities have been paid off. You have zero active loans.'
+                  : `${debtFreeInfo.maxMonths} ${debtFreeInfo.maxMonths === 1 ? 'month' : 'months'} to total debt freedom at current repayment pace.`}
+              </p>
+            </div>
+          </div>
+          {!debtFreeInfo.isDebtFree && totalOriginalAmount > 0 ? (
+            <div className="debt-freedom-progress-wrap">
+              <div className="debt-freedom-progress-label">
+                <span>Overall portfolio repaid</span>
+                <strong>
+                  {Math.round(Math.min(100, Math.max(0, ((totalOriginalAmount - totalBalance) / totalOriginalAmount) * 100)))}%
+                </strong>
+              </div>
+              <div className="debt-freedom-progress-bar" role="progressbar" aria-valuenow={Math.round(Math.min(100, Math.max(0, ((totalOriginalAmount - totalBalance) / totalOriginalAmount) * 100)))} aria-valuemin="0" aria-valuemax="100">
+                <div
+                  className="debt-freedom-progress-fill"
+                  style={{
+                    width: `${Math.min(100, Math.max(0, ((totalOriginalAmount - totalBalance) / totalOriginalAmount) * 100))}%`,
+                  }}
+                />
+              </div>
+              <small>
+                {formatINR(Math.max(0, totalOriginalAmount - totalBalance))} of {formatINR(totalOriginalAmount)} paid off
+              </small>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
       <section className="debt-overview" aria-label="Debt summary">
         <div className="debt-total">
           <span>Total remaining debt</span>
@@ -1285,7 +1351,90 @@ export default function DebtTracker({
               : `${formatINR(totalPaidThisMonth)} paid · ${formatINR(pendingObligationThisMonth)} pending`}
           </small>
         </div>
+        <div className="debt-stat">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.35rem' }}>
+            <span>Debt-to-Income (DTI)</span>
+            {dti.percentage != null ? (
+              <span
+                style={{
+                  fontSize: '0.66rem',
+                  fontWeight: 700,
+                  padding: '0.12rem 0.45rem',
+                  borderRadius: '999px',
+                  backgroundColor: `${dti.color}22`,
+                  color: dti.color,
+                  border: `1px solid ${dti.color}44`,
+                }}
+              >
+                {dti.label}
+              </span>
+            ) : null}
+          </div>
+          <strong>{dti.percentage != null ? `${dti.percentage}%` : '—'}</strong>
+          <small>{dti.description}</small>
+        </div>
       </section>
+
+      {/* P3: Repayment Strategy Playbooks (Avalanche vs. Snowball) */}
+      {activeDebts.length >= 2 ? (
+        <section className="debt-strategy-box" aria-label="Repayment strategy recommendations">
+          <div className="debt-strategy-head">
+            <div>
+              <span className="debt-eyebrow">Smart Payoff Strategy</span>
+              <h3>Choose your repayment attack plan</h3>
+            </div>
+            <div className="debt-strategy-toggle" role="tablist" aria-label="Repayment strategy selector">
+              <button
+                type="button"
+                className={`strategy-btn ${strategyMode === 'avalanche' ? 'active' : ''}`}
+                onClick={() => setStrategyMode('avalanche')}
+                title="Sort debts by highest interest rate first to minimize total interest paid to lenders"
+              >
+                ⚡ Avalanche <small>(Save Most Interest)</small>
+              </button>
+              <button
+                type="button"
+                className={`strategy-btn ${strategyMode === 'snowball' ? 'active' : ''}`}
+                onClick={() => setStrategyMode('snowball')}
+                title="Sort debts by lowest remaining balance first to score quick wins and eliminate payments"
+              >
+                ❄️ Snowball <small>(Fastest Wins)</small>
+              </button>
+            </div>
+          </div>
+
+          <div className="debt-strategy-body">
+            <p className="debt-strategy-desc">
+              {strategyMode === 'avalanche' ? (
+                <>
+                  <strong>Debt Avalanche:</strong> Mathematically optimal. Pay minimum required EMIs on all loans, and channel any bonus or extra prepayment directly into <strong>{activeStrategyList[0]?.name}</strong> ({activeStrategyList[0]?.rate != null ? `${activeStrategyList[0].rate}%` : 'highest'} interest) to save the maximum interest over time.
+                </>
+              ) : (
+                <>
+                  <strong>Debt Snowball:</strong> Psychologically empowering. Pay minimum EMIs on all loans, and throw all extra cash into <strong>{activeStrategyList[0]?.name}</strong> ({formatINR(activeStrategyList[0]?.balance)} balance) to clear your first loan quickest and gain momentum.
+                </>
+              )}
+            </p>
+
+            <div className="debt-strategy-steps">
+              <span className="debt-strategy-steps-label">Target Payoff Order:</span>
+              <div className="debt-strategy-pills">
+                {activeStrategyList.map((debt, idx) => (
+                  <div key={debt.id} className={`strategy-step-pill ${idx === 0 ? 'target-priority' : ''}`}>
+                    <span className="step-num">#{idx + 1}</span>
+                    <span className="step-name">{debt.name}</span>
+                    <span className="step-metric">
+                      {strategyMode === 'avalanche'
+                        ? (debt.rate != null ? `${debt.rate}% int.` : formatINR(debt.balance))
+                        : formatINR(debt.balance)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       {feedback ? <p className="debt-feedback" role="status">{feedback}</p> : null}
 
@@ -1317,7 +1466,14 @@ export default function DebtTracker({
                   <div className="debt-card-title">
                     <span className="debt-mark" aria-hidden="true">{debt.kind === 'credit_card' ? 'CC' : debt.kind === 'shark' ? 'P' : 'LN'}</span>
                     <div>
-                      <h3>{debt.name}</h3>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
+                        <h3>{debt.name}</h3>
+                        {activeDebts.length >= 2 && debt.id === priorityTargetDebtId ? (
+                          <span className="debt-priority-target-badge">
+                            🔥 Priority Target #1 ({strategyMode === 'avalanche' ? 'Highest Rate' : 'Smallest Loan'})
+                          </span>
+                        ) : null}
+                      </div>
                       <p>{[debt.lender, debt.category].filter(Boolean).join(' · ') || 'Uncategorized debt'}</p>
                     </div>
                   </div>

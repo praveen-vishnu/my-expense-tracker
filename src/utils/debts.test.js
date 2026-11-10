@@ -1,7 +1,21 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { normalizeData } from './storage.js'
-import { applyDebtPayment, calculatePaymentSplit, calculateRemainingBalance, calculateRemainingMonths, formatRemainingTenure, guessLoanAmount, normalizeDebt, normalizeDebtPayment, parseCSV, parseDebtImport } from './debts.js'
+import {
+  applyDebtPayment,
+  calculateDebtFreeDate,
+  calculateDtiRatio,
+  calculatePaymentSplit,
+  calculateRemainingBalance,
+  calculateRemainingMonths,
+  formatRemainingTenure,
+  getRepaymentStrategies,
+  guessLoanAmount,
+  normalizeDebt,
+  normalizeDebtPayment,
+  parseCSV,
+  parseDebtImport,
+} from './debts.js'
 
 test('normalizes legacy debt exports and retains informal-loan balances and monthly rates', () => {
   const debt = normalizeDebt({
@@ -341,6 +355,48 @@ test('calculateRemainingBalance computes accurate amortized balance from contrac
   }, '2026-07-15')
   assert.equal(Math.round(normalized.balance), 279289)
 })
+
+test('calculateDebtFreeDate accurately projects overall freedom date', () => {
+  assert.equal(calculateDebtFreeDate([]).isDebtFree, true)
+  assert.equal(calculateDebtFreeDate([{ balance: 0, status: 'paid' }]).isDebtFree, true)
+
+  const debts = [
+    { id: 'd1', name: 'Bike', balance: 50000, emi: 5000, monthsRemaining: 10 },
+    { id: 'd2', name: 'Car', balance: 400000, emi: 20000, monthsRemaining: 20 },
+  ]
+  const res = calculateDebtFreeDate(debts, '2026-11-01')
+  assert.equal(res.isDebtFree, false)
+  assert.equal(res.maxMonths, 20)
+  assert.equal(res.formattedDate, 'Jul 2028')
+})
+
+test('calculateDtiRatio evaluates debt health brackets correctly', () => {
+  assert.equal(calculateDtiRatio(15000, 0).status, 'unknown')
+  assert.equal(calculateDtiRatio(15000, 100000).percentage, 15)
+  assert.equal(calculateDtiRatio(15000, 100000).status, 'healthy')
+  assert.equal(calculateDtiRatio(30000, 100000).percentage, 30)
+  assert.equal(calculateDtiRatio(30000, 100000).status, 'moderate')
+  assert.equal(calculateDtiRatio(40000, 100000).percentage, 40)
+  assert.equal(calculateDtiRatio(40000, 100000).status, 'stretched')
+  assert.equal(calculateDtiRatio(55000, 100000).percentage, 55)
+  assert.equal(calculateDtiRatio(55000, 100000).status, 'critical')
+})
+
+test('getRepaymentStrategies sorts for Avalanche and Snowball correctly', () => {
+  const debts = [
+    { id: 'd1', name: 'Personal Loan', balance: 150000, rate: 14, status: 'active' },
+    { id: 'd2', name: 'Credit Card', balance: 45000, rate: 36, status: 'active' },
+    { id: 'd3', name: 'Family Loan', balance: 25000, rate: 0, status: 'active' },
+  ]
+  const { avalanche, snowball } = getRepaymentStrategies(debts)
+
+  // Avalanche: Credit Card (36%) -> Personal Loan (14%) -> Family Loan (0%)
+  assert.deepEqual(avalanche.map((d) => d.id), ['d2', 'd1', 'd3'])
+
+  // Snowball: Family Loan (₹25k) -> Credit Card (₹45k) -> Personal Loan (₹150k)
+  assert.deepEqual(snowball.map((d) => d.id), ['d3', 'd2', 'd1'])
+})
+
 
 
 

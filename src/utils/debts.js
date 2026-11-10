@@ -583,3 +583,125 @@ export function guessLoanAmount(name, emiAmount, installments) {
   return 0
 }
 
+/**
+ * Calculates the overall debt-free date and months remaining across all active debts.
+ */
+export function calculateDebtFreeDate(debts = [], currentDate = todayISO()) {
+  const active = debts.filter((d) => d && d.status !== 'paid' && Number(d.balance) > 0)
+  if (!active.length) {
+    return { isDebtFree: true, maxMonths: 0, debtFreeDate: null, formattedDate: 'Debt-Free 🎉' }
+  }
+
+  let maxMonths = 0
+  for (const debt of active) {
+    const months = calculateRemainingMonths(debt, currentDate)
+    if (months && months > maxMonths) {
+      maxMonths = months
+    }
+  }
+
+  if (maxMonths <= 0) {
+    maxMonths = 1
+  }
+
+  const [year, monthVal] = currentDate.slice(0, 7).split('-').map(Number)
+  const targetDate = new Date(year, monthVal - 1 + maxMonths, 1)
+  const targetYear = targetDate.getFullYear()
+  const targetMonthName = targetDate.toLocaleString('en-US', { month: 'short' })
+  const formattedDate = `${targetMonthName} ${targetYear}`
+
+  return {
+    isDebtFree: false,
+    maxMonths,
+    formattedDate,
+    targetYear,
+    targetMonthName,
+  }
+}
+
+/**
+ * Calculates Debt-to-Income (DTI) ratio and health status.
+ */
+export function calculateDtiRatio(monthlyObligation = 0, monthlyIncome = 0) {
+  const emi = Number(monthlyObligation) || 0
+  const income = Number(monthlyIncome) || 0
+
+  if (income <= 0) {
+    return {
+      percentage: null,
+      status: 'unknown',
+      label: 'Set income to calculate DTI',
+      description: 'Add your monthly income to assess your debt burden ratio.',
+      color: 'var(--muted)',
+    }
+  }
+
+  const percentage = Math.round((emi / income) * 100)
+
+  if (percentage <= 20) {
+    return {
+      percentage,
+      status: 'healthy',
+      label: 'Healthy (< 20%)',
+      description: 'Your monthly debt burden is low and safe.',
+      color: '#38a169',
+    }
+  }
+
+  if (percentage <= 35) {
+    return {
+      percentage,
+      status: 'moderate',
+      label: 'Manageable (20–35%)',
+      description: 'Healthy debt level within standard lending guidelines.',
+      color: '#3182ce',
+    }
+  }
+
+  if (percentage <= 45) {
+    return {
+      percentage,
+      status: 'stretched',
+      label: 'Stretched (36–45%)',
+      description: 'Caution: Debt is consuming a significant portion of take-home pay.',
+      color: '#dd6b20',
+    }
+  }
+
+  return {
+    percentage,
+    status: 'critical',
+    label: 'High risk (> 45%)',
+    description: 'High debt burden. Prioritize prepayments to reduce monthly strain.',
+    color: '#e53e3e',
+  }
+}
+
+/**
+ * Ranks active debts for Avalanche (highest interest first) and Snowball (smallest balance first).
+ */
+export function getRepaymentStrategies(debts = []) {
+  const active = debts.filter((d) => d && d.status !== 'paid' && Number(d.balance) > 0)
+
+  // Avalanche: Sort by annual interest rate descending. If equal, higher balance first.
+  const avalanche = [...active].sort((a, b) => {
+    const rateA = Number(a.monthlyRate != null ? a.monthlyRate * 12 : a.rate ?? a.apr ?? 0)
+    const rateB = Number(b.monthlyRate != null ? b.monthlyRate * 12 : b.rate ?? b.apr ?? 0)
+    if (rateB !== rateA) return rateB - rateA
+    return (Number(b.balance) || 0) - (Number(a.balance) || 0)
+  })
+
+  // Snowball: Sort by remaining balance ascending. If equal, higher rate first.
+  const snowball = [...active].sort((a, b) => {
+    const balA = Number(a.balance) || 0
+    const balB = Number(b.balance) || 0
+    if (balA !== balB) return balA - balB
+    const rateA = Number(a.monthlyRate != null ? a.monthlyRate * 12 : a.rate ?? a.apr ?? 0)
+    const rateB = Number(b.monthlyRate != null ? b.monthlyRate * 12 : b.rate ?? b.apr ?? 0)
+    return rateB - rateA
+  })
+
+  return { avalanche, snowball }
+}
+
+
