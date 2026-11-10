@@ -3,7 +3,7 @@ import ModalSheet from '../components/ModalSheet.jsx'
 import { parseImportedJson } from '../utils/storage.js'
 import { formatINR, formatMonthLabel, parseAmount, createId } from '../utils/formatting.js'
 import { getStoredGeminiKey, saveStoredGeminiKey } from '../utils/geminiScanner.js'
-import { guessLoanAmount } from '../utils/debts.js'
+import { calculateRemainingBalance, guessLoanAmount } from '../utils/debts.js'
 
 export default function Settings({
   data,
@@ -313,6 +313,7 @@ export default function Settings({
         emi: amount,
         totalMonths: installments,
         monthsRemaining: installments,
+        loanTakenDate: `${month}-${String(nextDueDay).padStart(2, '0')}`,
         nextDue: `${month}-${String(nextDueDay).padStart(2, '0')}`,
         status: balance <= 0 ? 'paid' : 'active',
       }
@@ -590,7 +591,11 @@ export default function Settings({
                     </small>
                     <small className="schedule-link-info">
                       {account ? `From ${account.name}` : 'No account selected'}
-                      {linkedDebt ? ` · Tracks ${linkedDebt.name}` : ''}
+                      {linkedDebt ? (
+                        <span style={{ color: '#2b6cb0', fontWeight: 600 }}> · 🔗 Tracks "{linkedDebt.name}" in Debt Tracker ({formatINR(linkedDebt.balance)} left)</span>
+                      ) : (schedule.kind === 'emi' ? (
+                        <span style={{ color: '#c05621', fontWeight: 600 }}> · ⚠️ Not linked to Debt Tracker</span>
+                      ) : '')}
                     </small>
                   </span>
                   <span className="schedule-actions">
@@ -753,12 +758,37 @@ export default function Settings({
                           min="1"
                           value={autoDebtAmount}
                           required
-                          onChange={(e) => setAutoDebtAmount(e.target.value)}
+                          onChange={(e) => {
+                            const val = e.target.value
+                            setAutoDebtAmount(val)
+                            if (val && !autoDebtBalance) setAutoDebtBalance(val)
+                          }}
                           placeholder={String(guessLoanAmount(scheduleName, scheduleAmount, scheduleInstallments) || '1200000')}
                         />
                       </label>
                       <label className="field">
-                        <span>Remaining balance</span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span>Remaining balance</span>
+                          {autoDebtAmount && scheduleAmount ? (
+                            <button
+                              type="button"
+                              className="text-btn"
+                              style={{ fontSize: '0.78rem', color: 'var(--brand, #38a169)', fontWeight: 600, padding: 0 }}
+                              onClick={() => {
+                                const calc = calculateRemainingBalance({
+                                  originalAmount: parseAmount(autoDebtAmount),
+                                  rate: autoDebtRate ? parseAmount(autoDebtRate) : null,
+                                  totalMonths: Number(scheduleInstallments) || null,
+                                  loanTakenDate: `${month}-01`,
+                                  emi: parseAmount(scheduleAmount) || null,
+                                })
+                                if (calc != null) setAutoDebtBalance(String(calc))
+                              }}
+                            >
+                              ⚡ Auto-calculate
+                            </button>
+                          ) : null}
+                        </div>
                         <input
                           type="number"
                           min="0"

@@ -388,11 +388,15 @@ export default function App() {
             debts={data.debts || []}
             payments={data.debtPayments || []}
             recurringExpenses={data.recurringExpenses || []}
+            accounts={data.accounts || []}
+            categories={data.categories || []}
+            month={month}
             onSaveDebt={saveDebt}
             onDeleteDebt={deleteDebt}
             onClearAllDebts={clearAllDebts}
             onRecordPayment={recordDebtPayment}
             onImportDebts={importDebts}
+            onAddRecurringExpense={addRecurringExpense}
           />
         ) : null}
 

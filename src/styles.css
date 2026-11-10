@@ -4999,6 +4999,64 @@ h2 {
   line-height: 1.35;
 }
 
+.debt-recurring-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.42rem 0.68rem;
+  border-radius: 9px;
+  font-size: 0.74rem;
+  margin: 0.45rem 0 0.25rem;
+  background: rgba(49, 130, 206, 0.09);
+  border: 1px solid rgba(49, 130, 206, 0.22);
+  color: #2b6cb0;
+}
+
+:root[data-theme='dark'] .debt-recurring-badge {
+  background: rgba(66, 153, 225, 0.15);
+  border-color: rgba(66, 153, 225, 0.3);
+  color: #90cdf4;
+}
+
+.debt-recurring-badge .debt-recurring-icon {
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+.debt-recurring-badge .debt-recurring-text {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.35;
+}
+
+.debt-recurring-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.42rem 0.68rem;
+  border-radius: 9px;
+  font-size: 0.74rem;
+  margin: 0.45rem 0 0.25rem;
+  background: rgba(128, 90, 213, 0.08);
+  border: 1px dashed rgba(128, 90, 213, 0.3);
+  color: #6b46c1;
+}
+
+:root[data-theme='dark'] .debt-recurring-cta {
+  background: rgba(159, 122, 234, 0.12);
+  border-color: rgba(159, 122, 234, 0.35);
+  color: #d6bcfa;
+}
+
+.debt-recurring-cta button {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
 .debt-card-balance {
   justify-content: space-between;
   gap: 1rem;

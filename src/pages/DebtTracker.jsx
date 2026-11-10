@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import ModalSheet from '../components/ModalSheet.jsx'
-import { formatINR, formatShortDate, isValidDate, parseAmount, todayISO } from '../utils/formatting.js'
+import { createId, formatINR, formatShortDate, isValidDate, parseAmount, todayISO } from '../utils/formatting.js'
 import { calculatePaymentSplit, calculateRemainingBalance, calculateRemainingMonths, formatRemainingTenure, parseDebtImport, parseCSV, parseExcel } from '../utils/debts.js'
 
 function blankDebt() {
@@ -27,8 +27,18 @@ function debtFormValues(debt) {
   )
 }
 
-function DebtForm({ initial, onSave, onDelete, onCancel }) {
+function DebtForm({
+  initial,
+  accounts = [],
+  month = todayISO().slice(0, 7),
+  linkedSchedule = null,
+  onAddRecurringExpense,
+  onSave,
+  onDelete,
+  onCancel,
+}) {
   const [values, setValues] = useState(() => debtFormValues(initial))
+  const [createRecurring, setCreateRecurring] = useState(!initial?.id && Boolean(onAddRecurringExpense))
   const [error, setError] = useState('')
   const nameRef = useRef(null)
   const isEditing = Boolean(initial?.id)
@@ -113,6 +123,32 @@ function DebtForm({ initial, onSave, onDelete, onCancel }) {
       setError(result?.error || 'The debt could not be saved.')
       return
     }
+
+    if (createRecurring && onAddRecurringExpense && values.emi) {
+      const parsedEmi = parseAmount(values.emi)
+      if (Number.isFinite(parsedEmi) && parsedEmi > 0) {
+        const nextDueDay = values.nextDue ? Number(values.nextDue.split('-')[2]) : 5
+        const safeDay = Number.isInteger(nextDueDay) && nextDueDay >= 1 && nextDueDay <= 31 ? Math.min(nextDueDay, 28) : 5
+        const matchedAccount = accounts.find((a) =>
+          values.lender && a.name.toLowerCase().includes(values.lender.toLowerCase())
+        ) || accounts.find((a) => a.isDefault) || accounts[0]
+
+        onAddRecurringExpense({
+          id: createId(),
+          name: `${values.name.trim()} EMI`,
+          amount: parsedEmi,
+          category: values.category || 'EMI',
+          note: `Monthly EMI for ${values.name.trim()}`,
+          day: safeDay,
+          startMonth: month,
+          kind: 'emi',
+          installments: integerField(values.totalMonths) || integerField(values.monthsRemaining) || 12,
+          accountId: matchedAccount?.id || null,
+          debtId: result.id,
+        })
+      }
+    }
+
     onCancel()
   }
 
@@ -251,6 +287,25 @@ function DebtForm({ initial, onSave, onDelete, onCancel }) {
             />
           </label>
         </div>
+        {!linkedSchedule && onAddRecurringExpense ? (
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', fontSize: '0.84rem', cursor: 'pointer', margin: '0.8rem 0 0.2rem', padding: '0.6rem 0.8rem', borderRadius: '8px', background: 'rgba(49, 130, 206, 0.08)', border: '1px solid rgba(49, 130, 206, 0.2)' }}>
+            <input
+              type="checkbox"
+              checked={createRecurring}
+              onChange={(e) => setCreateRecurring(e.target.checked)}
+            />
+            <div>
+              <strong>✨ Automatically create &amp; link in Monthly Recurring Expenses</strong>
+              <div style={{ fontSize: '0.74rem', color: 'var(--muted)', marginTop: '0.1rem' }}>
+                Auto-generates a recurring EMI schedule so monthly expenses and debt reductions are tracked automatically.
+              </div>
+            </div>
+          </label>
+        ) : linkedSchedule ? (
+          <div style={{ fontSize: '0.8rem', color: '#2b6cb0', margin: '0.75rem 0 0.2rem', padding: '0.5rem 0.75rem', background: 'rgba(49, 130, 206, 0.08)', borderRadius: '8px', border: '1px solid rgba(49, 130, 206, 0.2)' }}>
+            🔄 <strong>Linked to Monthly Recurring EMI:</strong> {linkedSchedule.name} ({formatINR(linkedSchedule.amount)} on day {linkedSchedule.day})
+          </div>
+        ) : null}
         {error ? <p className="debt-form-error" role="alert">{error}</p> : null}
         <div className="debt-form-actions" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           {isEditing && onDelete ? (
@@ -1008,11 +1063,15 @@ export default function DebtTracker({
   debts = [],
   payments = [],
   recurringExpenses = [],
+  accounts = [],
+  categories = [],
+  month = todayISO().slice(0, 7),
   onSaveDebt,
   onDeleteDebt,
   onClearAllDebts,
   onRecordPayment,
   onImportDebts,
+  onAddRecurringExpense,
 }) {
   const [editingDebt, setEditingDebt] = useState(null)
   const [paymentDebt, setPaymentDebt] = useState(null)
@@ -1023,6 +1082,39 @@ export default function DebtTracker({
   const currentMonthKey = today.slice(0, 7)
   const currentMonthName = new Date(today + 'T00:00:00').toLocaleString('en-US', { month: 'short' })
   const activeDebts = useMemo(() => debts.filter((debt) => debt.status !== 'paid' && debt.balance > 0), [debts])
+
+  function handleCreateRecurringFromDebt(debt) {
+    if (!onAddRecurringExpense) return
+    const day = debt.nextDue ? Number(debt.nextDue.split('-')[2]) : 5
+    const safeDay = Number.isInteger(day) && day >= 1 && day <= 31 ? Math.min(day, 28) : 5
+    const installments = debt.totalMonths || debt.monthsRemaining || 12
+    const amount = monthlyObligation(debt) || debt.emi || 0
+    if (!amount || amount <= 0) {
+      setFeedback('Please set a monthly payment on this debt before creating a recurring schedule.')
+      return
+    }
+
+    const matchedAccount = accounts.find((a) =>
+      debt.lender && a.name.toLowerCase().includes(debt.lender.toLowerCase())
+    ) || accounts.find((a) => a.isDefault) || accounts[0]
+
+    const newSchedule = {
+      id: createId(),
+      name: `${debt.name} EMI`,
+      amount,
+      category: categories.find((c) => /loan|emi|debt/i.test(c)) || categories[0] || 'EMI',
+      note: `Monthly EMI for ${debt.name}`,
+      day: safeDay,
+      startMonth: month,
+      kind: 'emi',
+      installments,
+      accountId: matchedAccount?.id || null,
+      debtId: debt.id,
+    }
+
+    onAddRecurringExpense(newSchedule)
+    setFeedback(`✨ Created monthly recurring EMI for "${debt.name}" (${formatINR(amount)}/mo on day ${safeDay})!`)
+  }
   const totalBalance = activeDebts.reduce((sum, debt) => sum + debt.balance, 0)
   const monthlyPayments = activeDebts.reduce((sum, debt) => sum + monthlyObligation(debt), 0)
 
@@ -1278,6 +1370,30 @@ export default function DebtTracker({
                   <span>{formatRemainingTenure(debt, today)}</span>
                 </div>
 
+                {linkedSchedule ? (
+                  <div className="debt-recurring-badge">
+                    <span className="debt-recurring-icon">🔄</span>
+                    <div className="debt-recurring-text">
+                      <strong>Auto-EMI Active:</strong> {formatINR(linkedSchedule.amount)}/month on day {linkedSchedule.day}
+                      {accounts.find((a) => a.id === linkedSchedule.accountId) ? ` from ${accounts.find((a) => a.id === linkedSchedule.accountId).name}` : ''}
+                      <span> · Automatically logs expense &amp; reduces debt each month</span>
+                    </div>
+                  </div>
+                ) : !isPaid && onAddRecurringExpense && (debt.emi || monthlyObligation(debt)) ? (
+                  <div className="debt-recurring-cta">
+                    <span className="debt-recurring-cta-text">
+                      💡 <strong>Not set as recurring:</strong> Auto-record {formatINR(monthlyObligation(debt) || debt.emi)} monthly?
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => handleCreateRecurringFromDebt(debt)}
+                    >
+                      + Link to Recurring EMI
+                    </button>
+                  </div>
+                ) : null}
+
                 <div className="debt-card-footer">
                   <div className="debt-payment-preview">
                     {debtPayments.length ? (
@@ -1346,6 +1462,10 @@ export default function DebtTracker({
       {editingDebt ? (
         <DebtForm
           initial={editingDebt.id ? editingDebt : null}
+          accounts={accounts}
+          month={month}
+          linkedSchedule={editingDebt.id ? linkedEmiByDebt.get(editingDebt.id) : null}
+          onAddRecurringExpense={onAddRecurringExpense}
           onSave={onSaveDebt}
           onDelete={onDeleteDebt}
           onCancel={() => setEditingDebt(null)}
