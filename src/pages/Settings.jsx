@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import ModalSheet from '../components/ModalSheet.jsx'
 import { parseImportedJson } from '../utils/storage.js'
-import { formatINR, formatMonthLabel, parseAmount, createId } from '../utils/formatting.js'
+import { formatINR, formatMonthLabel, parseAmount, createId, isValidDate } from '../utils/formatting.js'
 import { getStoredGeminiKey, saveStoredGeminiKey } from '../utils/geminiScanner.js'
-import { calculateRemainingBalance, guessLoanAmount } from '../utils/debts.js'
+import { calculateRemainingBalance, calculateRemainingMonths, guessLoanAmount } from '../utils/debts.js'
 
 export default function Settings({
   data,
@@ -49,6 +49,7 @@ export default function Settings({
   const [autoDebtAmount, setAutoDebtAmount] = useState('')
   const [autoDebtBalance, setAutoDebtBalance] = useState('')
   const [autoDebtRate, setAutoDebtRate] = useState('')
+  const [autoDebtStartDate, setAutoDebtStartDate] = useState('')
 
   // Account form state
   const [accName, setAccName] = useState('')
@@ -212,6 +213,12 @@ export default function Settings({
     setAutoDebtAmount(guessed ? String(guessed) : '')
     setAutoDebtBalance(guessed ? String(guessed) : '')
     setAutoDebtRate('')
+    if (schedule.startMonth) {
+      const safeDay = Math.min(Number(schedule.day) || 5, 28)
+      setAutoDebtStartDate(`${schedule.startMonth}-${String(safeDay).padStart(2, '0')}`)
+    } else {
+      setAutoDebtStartDate('')
+    }
     setFeedback({ section: '', error: '', message: '', field: '' })
     setScheduleEditorOpen(true)
   }
@@ -229,6 +236,7 @@ export default function Settings({
     setAutoDebtAmount('')
     setAutoDebtBalance('')
     setAutoDebtRate('')
+    setAutoDebtStartDate(`${month}-01`)
     setFeedback({ section: '', error: '', message: '', field: '' })
     setScheduleEditorOpen(true)
   }
@@ -247,6 +255,7 @@ export default function Settings({
     setAutoDebtAmount('')
     setAutoDebtBalance('')
     setAutoDebtRate('')
+    setAutoDebtStartDate('')
     setFeedback({ section: '', error: '', message: '', field: '' })
   }
 
@@ -299,6 +308,18 @@ export default function Settings({
       const rate = autoDebtRate ? parseAmount(autoDebtRate) : null
       const newDebtId = createId()
       const nextDueDay = Math.min(day, 28)
+      const startDate = (autoDebtStartDate && isValidDate(autoDebtStartDate))
+        ? autoDebtStartDate
+        : `${month}-${String(nextDueDay).padStart(2, '0')}`
+
+      const computedRemainingMonths = calculateRemainingMonths({
+        loanTakenDate: startDate,
+        totalMonths: installments,
+        balance,
+        emi: amount,
+        rate,
+        status: balance <= 0 ? 'paid' : 'active',
+      })
 
       newDebtRecord = {
         id: newDebtId,
@@ -312,8 +333,10 @@ export default function Settings({
         monthlyRate: Number.isFinite(rate) ? Math.round((rate / 12) * 1000) / 1000 : null,
         emi: amount,
         totalMonths: installments,
-        monthsRemaining: installments,
-        loanTakenDate: `${month}-${String(nextDueDay).padStart(2, '0')}`,
+        monthsRemaining: computedRemainingMonths != null ? computedRemainingMonths : installments,
+        principalPaid: Math.max(0, originalAmount - balance),
+        interestPaid: 0,
+        loanTakenDate: startDate,
         nextDue: `${month}-${String(nextDueDay).padStart(2, '0')}`,
         status: balance <= 0 ? 'paid' : 'active',
       }
@@ -335,7 +358,7 @@ export default function Settings({
           category: scheduleCategory,
           note: scheduleName.trim(),
           day,
-          startMonth: existing?.startMonth || month,
+          startMonth: existing?.startMonth || ((autoDebtStartDate && isValidDate(autoDebtStartDate)) ? autoDebtStartDate.slice(0, 7) : month),
           kind: scheduleKind,
           installments: scheduleKind === 'emi' ? installments : null,
           accountId: scheduleAccountId || null,
@@ -352,7 +375,7 @@ export default function Settings({
         category: scheduleCategory,
         note: scheduleName.trim(),
         day,
-        startMonth: month,
+        startMonth: (autoDebtStartDate && isValidDate(autoDebtStartDate)) ? autoDebtStartDate.slice(0, 7) : month,
         kind: scheduleKind,
         installments: scheduleKind === 'emi' ? installments : null,
         accountId: scheduleAccountId || null,
@@ -365,6 +388,7 @@ export default function Settings({
       setAutoDebtAmount('')
       setAutoDebtBalance('')
       setAutoDebtRate('')
+      setAutoDebtStartDate('')
       reportMessage('schedule', newDebtRecord ? 'Recurring schedule added and debt created in Debt Tracker.' : 'Recurring schedule added.')
     }
   }
@@ -723,11 +747,17 @@ export default function Settings({
                       onChange={(event) => {
                         const val = event.target.value
                         setScheduleDebtId(val)
-                        if (val === '__auto_create__' && !autoDebtAmount) {
-                          const guessed = guessLoanAmount(scheduleName, scheduleAmount, scheduleInstallments)
-                          if (guessed) {
-                            setAutoDebtAmount(String(guessed))
-                            setAutoDebtBalance(String(guessed))
+                        if (val === '__auto_create__') {
+                          if (!autoDebtStartDate) {
+                            const defaultDay = Math.min(Number(scheduleDay) || 5, 28)
+                            setAutoDebtStartDate(`${month}-${String(defaultDay).padStart(2, '0')}`)
+                          }
+                          if (!autoDebtAmount) {
+                            const guessed = guessLoanAmount(scheduleName, scheduleAmount, scheduleInstallments)
+                            if (guessed) {
+                              setAutoDebtAmount(String(guessed))
+                              setAutoDebtBalance(String(guessed))
+                            }
                           }
                         }
                       }}
@@ -749,6 +779,32 @@ export default function Settings({
                     </div>
                     <div className="schedule-editor-grid">
                       <label className="field">
+                        <span>Loan start / First EMI date</span>
+                        <input
+                          type="date"
+                          value={autoDebtStartDate || `${month}-01`}
+                          required
+                          onChange={(e) => {
+                            const newDate = e.target.value
+                            setAutoDebtStartDate(newDate)
+                            if (autoDebtAmount && scheduleAmount) {
+                              const calc = calculateRemainingBalance({
+                                originalAmount: parseAmount(autoDebtAmount),
+                                rate: autoDebtRate ? parseAmount(autoDebtRate) : null,
+                                totalMonths: Number(scheduleInstallments) || null,
+                                loanTakenDate: newDate,
+                                emi: parseAmount(scheduleAmount) || null,
+                              })
+                              if (calc != null) setAutoDebtBalance(String(calc))
+                            }
+                          }}
+                        />
+                        <small style={{ color: 'var(--muted)', fontSize: '0.72rem', marginTop: '0.2rem' }}>
+                          Used to calculate elapsed tenure and remaining balance
+                        </small>
+                      </label>
+
+                      <label className="field">
                         <span>Total loan amount (Principal)</span>
                         <input
                           type="number"
@@ -758,11 +814,23 @@ export default function Settings({
                           onChange={(e) => {
                             const val = e.target.value
                             setAutoDebtAmount(val)
-                            if (val && !autoDebtBalance) setAutoDebtBalance(val)
+                            if (val && scheduleAmount) {
+                              const calc = calculateRemainingBalance({
+                                originalAmount: parseAmount(val),
+                                rate: autoDebtRate ? parseAmount(autoDebtRate) : null,
+                                totalMonths: Number(scheduleInstallments) || null,
+                                loanTakenDate: autoDebtStartDate || `${month}-01`,
+                                emi: parseAmount(scheduleAmount) || null,
+                              })
+                              setAutoDebtBalance(calc != null ? String(calc) : val)
+                            } else if (val && !autoDebtBalance) {
+                              setAutoDebtBalance(val)
+                            }
                           }}
                           placeholder={String(guessLoanAmount(scheduleName, scheduleAmount, scheduleInstallments) || '1200000')}
                         />
                       </label>
+
                       <label className="field">
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span>Remaining balance</span>
@@ -776,7 +844,7 @@ export default function Settings({
                                   originalAmount: parseAmount(autoDebtAmount),
                                   rate: autoDebtRate ? parseAmount(autoDebtRate) : null,
                                   totalMonths: Number(scheduleInstallments) || null,
-                                  loanTakenDate: `${month}-01`,
+                                  loanTakenDate: autoDebtStartDate || `${month}-01`,
                                   emi: parseAmount(scheduleAmount) || null,
                                 })
                                 if (calc != null) setAutoDebtBalance(String(calc))
@@ -795,6 +863,7 @@ export default function Settings({
                           placeholder={String(autoDebtAmount || '1200000')}
                         />
                       </label>
+
                       <label className="field">
                         <span>Annual interest rate % (optional)</span>
                         <input
@@ -802,7 +871,20 @@ export default function Settings({
                           step="0.01"
                           min="0"
                           value={autoDebtRate}
-                          onChange={(e) => setAutoDebtRate(e.target.value)}
+                          onChange={(e) => {
+                            const val = e.target.value
+                            setAutoDebtRate(val)
+                            if (autoDebtAmount && scheduleAmount) {
+                              const calc = calculateRemainingBalance({
+                                originalAmount: parseAmount(autoDebtAmount),
+                                rate: val ? parseAmount(val) : null,
+                                totalMonths: Number(scheduleInstallments) || null,
+                                loanTakenDate: autoDebtStartDate || `${month}-01`,
+                                emi: parseAmount(scheduleAmount) || null,
+                              })
+                              if (calc != null) setAutoDebtBalance(String(calc))
+                            }
+                          }}
                           placeholder="e.g. 9.5"
                         />
                       </label>
