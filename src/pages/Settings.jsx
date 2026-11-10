@@ -318,9 +318,6 @@ export default function Settings({
         status: balance <= 0 ? 'paid' : 'active',
       }
       finalDebtId = newDebtId
-      if (onSaveDebt) {
-        onSaveDebt(newDebtRecord)
-      }
     } else if (scheduleKind === 'emi' && scheduleDebtId && (data.recurringExpenses || []).some((schedule) =>
       schedule.id !== editingScheduleId && schedule.debtId === scheduleDebtId
     )) {

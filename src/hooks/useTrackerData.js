@@ -280,16 +280,17 @@ export function useTrackerData(authReady, authUser, month) {
     if (!normalized) return { ok: false, error: 'Enter a name, original amount, and valid balance.' }
 
     enqueueMutation({ table: 'debts', id, op: 'upsert', payload: normalized })
-    setData((current) => {
-      const next = {
-        ...current,
-        debts: existingId
-          ? (current.debts || []).map((debt) => debt.id === existingId ? normalized : debt)
-          : [normalized, ...(current.debts || [])],
-      }
-      dataRef.current = next
-      return next
-    })
+    const existingDebts = dataRef.current?.debts || []
+    const exists = existingDebts.some((debt) => debt.id === id)
+    const nextDebts = exists
+      ? existingDebts.map((debt) => (debt.id === id ? normalized : debt))
+      : [normalized, ...existingDebts]
+    const next = {
+      ...(dataRef.current || {}),
+      debts: nextDebts,
+    }
+    dataRef.current = next
+    setData(next)
     return { ok: true, id, debt: normalized }
   }, [])
 
@@ -664,9 +665,13 @@ export function useTrackerData(authReady, authUser, month) {
       const normalizedDebt = normalizeDebt(newDebt)
       if (normalizedDebt) {
         enqueueMutation({ table: 'debts', id: normalizedDebt.id, op: 'upsert', payload: normalizedDebt })
+        const existingDebts = current.debts || []
+        const exists = existingDebts.some((d) => d.id === normalizedDebt.id)
         current = {
           ...current,
-          debts: [normalizedDebt, ...(current.debts || [])],
+          debts: exists
+            ? existingDebts.map((d) => (d.id === normalizedDebt.id ? normalizedDebt : d))
+            : [normalizedDebt, ...existingDebts],
         }
       }
     }
@@ -692,9 +697,13 @@ export function useTrackerData(authReady, authUser, month) {
       const normalizedDebt = normalizeDebt(newDebt)
       if (normalizedDebt) {
         enqueueMutation({ table: 'debts', id: normalizedDebt.id, op: 'upsert', payload: normalizedDebt })
+        const existingDebts = current.debts || []
+        const exists = existingDebts.some((d) => d.id === normalizedDebt.id)
         current = {
           ...current,
-          debts: [normalizedDebt, ...(current.debts || [])],
+          debts: exists
+            ? existingDebts.map((d) => (d.id === normalizedDebt.id ? normalizedDebt : d))
+            : [normalizedDebt, ...existingDebts],
         }
       }
     }

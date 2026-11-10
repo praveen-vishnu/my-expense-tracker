@@ -1081,7 +1081,15 @@ export default function DebtTracker({
   const today = todayISO()
   const currentMonthKey = today.slice(0, 7)
   const currentMonthName = new Date(today + 'T00:00:00').toLocaleString('en-US', { month: 'short' })
-  const activeDebts = useMemo(() => debts.filter((debt) => debt.status !== 'paid' && debt.balance > 0), [debts])
+  const uniqueDebts = useMemo(() => {
+    const seen = new Set()
+    return (debts || []).filter((debt) => {
+      if (!debt || !debt.id || seen.has(debt.id)) return false
+      seen.add(debt.id)
+      return true
+    })
+  }, [debts])
+  const activeDebts = useMemo(() => uniqueDebts.filter((debt) => debt.status !== 'paid' && debt.balance > 0), [uniqueDebts])
 
   function handleCreateRecurringFromDebt(debt) {
     if (!onAddRecurringExpense) return
@@ -1180,7 +1188,7 @@ export default function DebtTracker({
   }
 
   function handleExportDebts() {
-    const blob = new Blob([JSON.stringify(debts, null, 2)], { type: 'application/json' })
+    const blob = new Blob([JSON.stringify(uniqueDebts, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
@@ -1191,7 +1199,7 @@ export default function DebtTracker({
 
   function handleRecalculateAllBalances() {
     let updatedCount = 0
-    for (const debt of debts) {
+    for (const debt of uniqueDebts) {
       if (debt.status === 'paid') continue
       const calcBal = calculateRemainingBalance(debt, today)
       if (calcBal != null && Math.abs(calcBal - debt.balance) >= 1) {
@@ -1210,7 +1218,7 @@ export default function DebtTracker({
     }
   }
 
-  const sortedDebts = [...debts].sort((a, b) => {
+  const sortedDebts = [...uniqueDebts].sort((a, b) => {
     const aPaid = a.status === 'paid' || a.balance <= 0
     const bPaid = b.status === 'paid' || b.balance <= 0
     if (aPaid !== bPaid) return aPaid ? 1 : -1
@@ -1228,17 +1236,17 @@ export default function DebtTracker({
           <p>Track what remains, what’s due, and every payment made.</p>
         </div>
         <div className="debt-head-actions">
-          {debts.length > 0 ? (
+          {uniqueDebts.length > 0 ? (
             <button type="button" className="btn btn-secondary" onClick={handleRecalculateAllBalances} title="Recalculate remaining balances based on original amount, interest rate, tenure, start date, and EMI as of today">
               ⚡ Recalculate balances
             </button>
           ) : null}
-          {debts.length > 0 ? (
+          {uniqueDebts.length > 0 ? (
             <button type="button" className="btn btn-secondary" onClick={handleExportDebts}>Export JSON</button>
           ) : null}
           <button type="button" className="btn btn-secondary" onClick={() => setImportModalOpen(true)}>Import Debts</button>
           <button type="button" className="btn btn-primary" onClick={() => setEditingDebt({})}>+ Add debt</button>
-          {debts.length > 0 && onClearAllDebts ? (
+          {uniqueDebts.length > 0 && onClearAllDebts ? (
             <button
               type="button"
               className="text-btn"
@@ -1286,7 +1294,7 @@ export default function DebtTracker({
           <span className="debt-eyebrow">Portfolio</span>
           <h2>Your debts</h2>
         </div>
-        <span className="debt-count">{debts.length} total</span>
+        <span className="debt-count">{uniqueDebts.length} total</span>
       </div>
 
       {sortedDebts.length ? (
@@ -1446,7 +1454,7 @@ export default function DebtTracker({
           </div>
           <div className="debt-history-list">
             {[...payments].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8).map((payment) => {
-              const debt = debts.find((item) => item.id === payment.debtId)
+              const debt = uniqueDebts.find((item) => item.id === payment.debtId)
               return (
                 <article className="debt-history-row" key={payment.id}>
                   <div className="debt-history-date"><strong>{formatShortDate(payment.date)}</strong><span>{debt?.name || 'Debt payment'}</span></div>
@@ -1489,7 +1497,7 @@ export default function DebtTracker({
       ) : null}
       {importModalOpen ? (
         <DebtImportModal
-          existingDebts={debts}
+          existingDebts={uniqueDebts}
           onDismiss={() => setImportModalOpen(false)}
           onFileParsed={(previewList) => {
             setImportModalOpen(false)
