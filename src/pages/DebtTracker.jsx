@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import ModalSheet from '../components/ModalSheet.jsx'
 import { formatINR, formatShortDate, isValidDate, parseAmount, todayISO } from '../utils/formatting.js'
-import { calculatePaymentSplit, calculateRemainingMonths, formatRemainingTenure, parseDebtImport, parseCSV, parseExcel } from '../utils/debts.js'
+import { calculatePaymentSplit, calculateRemainingBalance, calculateRemainingMonths, formatRemainingTenure, parseDebtImport, parseCSV, parseExcel } from '../utils/debts.js'
 
 function blankDebt() {
   return {
@@ -37,10 +37,26 @@ function DebtForm({ initial, onSave, onDelete, onCancel }) {
     setValues((current) => ({ ...current, [key]: value }))
   }
 
+  const calculatedBalance = useMemo(() => {
+    return calculateRemainingBalance({
+      originalAmount: values.originalAmount === '' ? null : parseAmount(values.originalAmount),
+      rate: values.rate === '' ? null : parseAmount(values.rate),
+      monthlyRate: values.monthlyRate === '' ? null : parseAmount(values.monthlyRate),
+      totalMonths: values.totalMonths === '' ? null : Number(values.totalMonths),
+      loanTakenDate: values.loanTakenDate || null,
+      emi: values.emi === '' ? null : parseAmount(values.emi),
+      nextDue: values.nextDue || null,
+    })
+  }, [values.originalAmount, values.rate, values.monthlyRate, values.totalMonths, values.loanTakenDate, values.emi, values.nextDue])
+
   function submit(event) {
     event.preventDefault()
     const originalAmount = parseAmount(values.originalAmount)
-    const balance = parseAmount(values.balance)
+    let balance = values.balance === '' ? calculatedBalance : parseAmount(values.balance)
+    if (!Number.isFinite(balance) && Number.isFinite(calculatedBalance)) {
+      balance = calculatedBalance
+    }
+
     if (!values.name.trim()) {
       setError('Enter a name for this debt.')
       nameRef.current?.focus()
@@ -51,7 +67,7 @@ function DebtForm({ initial, onSave, onDelete, onCancel }) {
       return
     }
     if (!Number.isFinite(balance) || balance < 0) {
-      setError('Enter a valid remaining balance.')
+      setError('Enter the remaining balance, or fill in original amount, rate, tenure, start date, and EMI to calculate it automatically.')
       return
     }
     if (values.nextDue && !isValidDate(values.nextDue)) {
@@ -137,8 +153,32 @@ function DebtForm({ initial, onSave, onDelete, onCancel }) {
             <input type="number" min="0.01" step="0.01" required value={values.originalAmount} onChange={(event) => update('originalAmount', event.target.value)} placeholder="₹" />
           </label>
           <label className="field">
-            <span>Current balance</span>
-            <input type="number" min="0" step="0.01" required value={values.balance} onChange={(event) => update('balance', event.target.value)} placeholder="₹" />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>Current balance</span>
+              {calculatedBalance != null ? (
+                <button
+                  type="button"
+                  className="text-btn"
+                  style={{ fontSize: '0.78rem', color: 'var(--brand, #38a169)', fontWeight: 600, padding: 0 }}
+                  onClick={() => update('balance', String(calculatedBalance))}
+                >
+                  ⚡ Use {formatINR(calculatedBalance)}
+                </button>
+              ) : null}
+            </div>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={values.balance}
+              onChange={(event) => update('balance', event.target.value)}
+              placeholder={calculatedBalance != null ? `Auto: ${formatINR(calculatedBalance)}` : '₹'}
+            />
+            {calculatedBalance != null && values.balance === '' ? (
+              <small style={{ color: 'var(--brand, #38a169)', fontSize: '0.74rem', marginTop: '0.2rem', display: 'block' }}>
+                Auto-calculated from loan terms &amp; elapsed months: {formatINR(calculatedBalance)}
+              </small>
+            ) : null}
           </label>
           <label className="field">
             <span>Monthly payment / EMI</span>
@@ -527,6 +567,20 @@ function DebtImportPreviewModal({ items, onConfirm, onCancel, today }) {
     setDebts((prev) => prev.map((d) => (d.id === id ? { ...d, selected: !d.selected } : d)))
   }
 
+  function handleRecalculateAll() {
+    setDebts((prev) => prev.map((d) => {
+      const calc = calculateRemainingBalance(d, today)
+      if (calc != null) {
+        return {
+          ...d,
+          balance: calc,
+          principalPaid: Math.max(0, (d.originalAmount || 0) - calc),
+        }
+      }
+      return d
+    }))
+  }
+
   return (
     <ModalSheet titleId="debt-import-title" onDismiss={onCancel} className="sheet-wide debt-sheet">
       <div className="debt-import-preview-shell">
@@ -560,6 +614,15 @@ function DebtImportPreviewModal({ items, onConfirm, onCancel, today }) {
           <div>
             <small style={{ color: 'var(--muted)' }}>Selected balance to import:</small> <strong>{formatINR(totalBalance)}</strong>
           </div>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={handleRecalculateAll}
+            title="Recalculate remaining balances for all loans using original amount, rate, tenure, start date, and EMI"
+            style={{ fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginLeft: 'auto' }}
+          >
+            <span>⚡</span> Auto-calculate from terms
+          </button>
         </div>
 
         <div className="import-table-container">
@@ -756,8 +819,14 @@ function DebtImportModal({ onDismiss, onFileParsed, existingDebts = [] }) {
 
       const previewList = result.debts.map((d) => {
         const autoMonths = calculateRemainingMonths(d, today)
+        const autoBalance = calculateRemainingBalance(d, today)
+        const balance = (d.balance == null || d.balance === '')
+          ? (autoBalance != null ? autoBalance : d.originalAmount)
+          : d.balance
+
         return {
           ...d,
+          balance,
           monthsRemaining: autoMonths != null ? autoMonths : d.monthsRemaining,
           isDuplicate: existingIds.has(d.id),
           selected: true,
@@ -1028,6 +1097,27 @@ export default function DebtTracker({
     URL.revokeObjectURL(url)
   }
 
+  function handleRecalculateAllBalances() {
+    let updatedCount = 0
+    for (const debt of debts) {
+      if (debt.status === 'paid') continue
+      const calcBal = calculateRemainingBalance(debt, today)
+      if (calcBal != null && Math.abs(calcBal - debt.balance) >= 1) {
+        onSaveDebt({
+          ...debt,
+          balance: calcBal,
+          principalPaid: Math.max(0, (debt.originalAmount || 0) - calcBal),
+        }, debt.id)
+        updatedCount++
+      }
+    }
+    if (updatedCount > 0) {
+      setFeedback(`Recalculated remaining balance for ${updatedCount} ${updatedCount === 1 ? 'loan' : 'loans'} based on original amount, interest rate, tenure, and EMI as of today.`)
+    } else {
+      setFeedback('All loan balances already match their amortized schedules as of today.')
+    }
+  }
+
   const sortedDebts = [...debts].sort((a, b) => {
     const aPaid = a.status === 'paid' || a.balance <= 0
     const bPaid = b.status === 'paid' || b.balance <= 0
@@ -1046,6 +1136,11 @@ export default function DebtTracker({
           <p>Track what remains, what’s due, and every payment made.</p>
         </div>
         <div className="debt-head-actions">
+          {debts.length > 0 ? (
+            <button type="button" className="btn btn-secondary" onClick={handleRecalculateAllBalances} title="Recalculate remaining balances based on original amount, interest rate, tenure, start date, and EMI as of today">
+              ⚡ Recalculate balances
+            </button>
+          ) : null}
           {debts.length > 0 ? (
             <button type="button" className="btn btn-secondary" onClick={handleExportDebts}>Export JSON</button>
           ) : null}

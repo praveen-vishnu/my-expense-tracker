@@ -123,14 +123,101 @@ export function formatRemainingTenure(debt, currentDate = todayISO()) {
   return 'Open term'
 }
 
-export function normalizeDebt(debt) {
+/**
+ * Calculates the exact remaining amortized balance of a loan
+ * based on originalAmount, rate of interest, totalMonths, loanTakenDate, and emi.
+ */
+export function calculateRemainingBalance(debt, currentDate = todayISO()) {
+  if (!debt || typeof debt !== 'object') return null
+  if (debt.status === 'paid' || (debt.balance != null && Number(debt.balance) === 0)) {
+    return 0
+  }
+
+  const P = optionalAmount(debt.originalAmount ?? debt.original)
+  if (!P || P <= 0) return null
+
+  const loanTakenDate = debt.loanTakenDate ?? debt.loan_taken_date
+  if (!loanTakenDate || !isValidDate(loanTakenDate)) {
+    return null
+  }
+
+  const effectiveDate = typeof currentDate === 'string' && isValidDate(currentDate) ? currentDate : todayISO()
+  const totalMonths = optionalInteger(debt.totalMonths ?? debt.total_months)
+  const monthlyRate = optionalAmount(debt.monthlyRate ?? debt.monthly_rate)
+  const annualRate = optionalAmount(debt.rate ?? debt.apr)
+  const rate = monthlyRate != null ? monthlyRate : (annualRate != null ? annualRate / 12 : 0)
+  const r = rate > 0 ? rate / 100 : 0
+
+  let E = optionalAmount(debt.emi ?? debt.monthlyPayment ?? debt.minDue)
+
+  // Auto-calculate regular EMI if not provided and totalMonths is known
+  if ((!E || E <= 0) && totalMonths && totalMonths > 0) {
+    if (r > 0) {
+      E = (P * r * Math.pow(1 + r, totalMonths)) / (Math.pow(1 + r, totalMonths) - 1)
+    } else {
+      E = P / totalMonths
+    }
+  }
+
+  // Calculate elapsed installments from loanTakenDate to effectiveDate
+  const [currYear, currMonth, currDay] = effectiveDate.split('-').map(Number)
+  const [startYear, startMonth, startDay] = String(loanTakenDate).split('-').map(Number)
+  if (!startYear || !startMonth) return null
+
+  let elapsed = (currYear - startYear) * 12 + (currMonth - startMonth)
+  const nextDueDate = debt.nextDue ?? debt.next_due
+  const dueDay = (nextDueDate && isValidDate(nextDueDate) ? Number(String(nextDueDate).split('-')[2]) : null) || startDay || 1
+  if (currDay < dueDay) {
+    elapsed = Math.max(0, elapsed - 1)
+  }
+
+  if (totalMonths && totalMonths > 0) {
+    elapsed = Math.min(totalMonths, Math.max(0, elapsed))
+  } else {
+    elapsed = Math.max(0, elapsed)
+  }
+
+  // If no installments have elapsed yet, full principal remains
+  if (elapsed === 0) return Math.round(P * 100) / 100
+
+  // If all installments have elapsed, loan is fully paid off
+  if (totalMonths && elapsed >= totalMonths) return 0
+
+  // 0% interest loan (e.g., informal hand loan)
+  if (r === 0) {
+    if (!E || E <= 0) return Math.round(P * 100) / 100
+    return Math.max(0, Math.round((P - elapsed * E) * 100) / 100)
+  }
+
+  // Interest-only loan: EMI covers monthly interest, principal does not reduce
+  if (E && r * P >= E) {
+    return Math.round(P * 100) / 100
+  }
+
+  if (!E || E <= 0) return null
+
+  // Month-by-month standard amortisation
+  let bal = P
+  for (let i = 0; i < elapsed; i++) {
+    const interest = bal * r
+    const principal = Math.max(0, E - interest)
+    bal = Math.max(0, bal - principal)
+  }
+
+  return Math.round(bal * 100) / 100
+}
+
+export function normalizeDebt(debt, currentDate = todayISO()) {
   if (!debt || typeof debt !== 'object') return null
   const id = typeof debt.id === 'string' && debt.id.trim() ? debt.id.trim() : null
   const name = typeof debt.name === 'string' ? debt.name.trim() : ''
   const originalAmount = optionalAmount(debt.originalAmount ?? debt.original)
   const currentBalance = optionalAmount(debt.balance)
   const principalRemaining = optionalAmount(debt.principalRemaining ?? debt.principal_remaining)
-  const balance = currentBalance ?? principalRemaining ?? originalAmount
+
+  const effectiveDate = typeof currentDate === 'string' && isValidDate(currentDate) ? currentDate : todayISO()
+  const calculatedBalance = calculateRemainingBalance(debt, effectiveDate)
+  const balance = currentBalance ?? principalRemaining ?? (calculatedBalance != null ? calculatedBalance : originalAmount)
 
   if (!id || !name || originalAmount == null || originalAmount <= 0 || balance == null) return null
 
@@ -457,14 +544,14 @@ export function parseDebtImport(input) {
 
   const seenIds = new Set()
   const debts = records
-    .map(normalizeDebt)
+    .map((record) => normalizeDebt(record))
     .filter((debt) => {
       if (!debt || seenIds.has(debt.id)) return false
       seenIds.add(debt.id)
       return true
     })
   if (records.length && !debts.length) {
-    return { ok: false, error: 'No valid debts were found. Each debt needs a name, loan amount, and balance at minimum.' }
+    return { ok: false, error: 'No valid debts were found. Each debt needs a name and loan amount at minimum.' }
   }
 
   return { ok: true, debts, skipped: records.length - debts.length }

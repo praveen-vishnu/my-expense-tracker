@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { normalizeData } from './storage.js'
-import { applyDebtPayment, calculatePaymentSplit, calculateRemainingMonths, formatRemainingTenure, guessLoanAmount, normalizeDebt, normalizeDebtPayment, parseCSV, parseDebtImport } from './debts.js'
+import { applyDebtPayment, calculatePaymentSplit, calculateRemainingBalance, calculateRemainingMonths, formatRemainingTenure, guessLoanAmount, normalizeDebt, normalizeDebtPayment, parseCSV, parseDebtImport } from './debts.js'
 
 test('normalizes legacy debt exports and retains informal-loan balances and monthly rates', () => {
   const debt = normalizeDebt({
@@ -284,5 +284,63 @@ test('calculatePaymentSplit auto-splits payment amount into principal and intere
   assert.equal(smallPayment.interest, 500)
   assert.equal(smallPayment.principal, 0)
 })
+
+test('calculateRemainingBalance computes accurate amortized balance from contract terms and dates', () => {
+  // 1. Rohit Loan 1: 300000 @ 20% for 24 months, EMI 15270, taken 2026-05-31
+  // As of 2026-07-15: 2 months elapsed (June, July)
+  const rohitBal = calculateRemainingBalance({
+    originalAmount: 300000,
+    rate: 20,
+    totalMonths: 24,
+    loanTakenDate: '2026-05-31',
+    emi: 15270,
+    nextDue: '2026-08-02',
+  }, '2026-07-15')
+  assert.equal(Math.round(rohitBal), 279289)
+
+  // 2. 0% Interest hand loan: 200000, EMI 5000, 40 months, taken 2026-01-01
+  // As of 2026-11-05 (10 months elapsed): remaining is 200000 - 50000 = 150000
+  const handLoanBal = calculateRemainingBalance({
+    originalAmount: 200000,
+    rate: 0,
+    totalMonths: 40,
+    loanTakenDate: '2026-01-01',
+    emi: 5000,
+  }, '2026-11-05')
+  assert.equal(handLoanBal, 150000)
+
+  // 3. Interest-only loan: 500000, 24% annual (2% mo), EMI 10000 (covers only interest)
+  const sharkBal = calculateRemainingBalance({
+    originalAmount: 500000,
+    rate: 24,
+    loanTakenDate: '2026-01-01',
+    emi: 10000,
+  }, '2026-11-05')
+  assert.equal(sharkBal, 500000)
+
+  // 4. Fully expired loan: 60 months loan taken 65 months ago returns 0
+  const paidBal = calculateRemainingBalance({
+    originalAmount: 1209842,
+    rate: 10.7,
+    totalMonths: 60,
+    loanTakenDate: '2020-01-01',
+    emi: 26124,
+  }, '2026-11-05')
+  assert.equal(paidBal, 0)
+
+  // 5. Normalizing debt without balance uses calculated balance
+  const normalized = normalizeDebt({
+    id: 'test-auto-bal',
+    name: 'Auto Loan',
+    originalAmount: 300000,
+    rate: 20,
+    totalMonths: 24,
+    loanTakenDate: '2026-05-31',
+    emi: 15270,
+    nextDue: '2026-08-02',
+  }, '2026-07-15')
+  assert.equal(Math.round(normalized.balance), 279289)
+})
+
 
 
