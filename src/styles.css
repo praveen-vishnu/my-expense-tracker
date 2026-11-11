@@ -5965,13 +5965,13 @@ h2 {
   }
 
   .debt-overview {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem 1rem;
     padding: 1.1rem;
   }
 
   .debt-total {
-    grid-column: auto;
+    grid-column: 1 / -1;
     padding-bottom: 0.9rem;
     border-bottom: 1px solid rgb(255 255 255 / 0.18);
   }
@@ -5982,12 +5982,22 @@ h2 {
 
   .debt-stat {
     padding: 0.75rem 0;
-    border-bottom: 1px solid rgb(255 255 255 / 0.12);
+    border-top: 1px solid rgb(255 255 255 / 0.12);
   }
 
   .debt-stat:last-child {
-    padding-bottom: 0;
-    border-bottom: 0;
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: center;
+  }
+
+  .debt-stat:last-child > div {
+    grid-column: 1 / -1;
+  }
+
+  .debt-stat:last-child > small {
+    grid-column: 2;
+    grid-row: 2;
   }
 
   .debt-total > strong,
@@ -6153,6 +6163,10 @@ h2 {
     right: 0.75rem;
     bottom: calc(0.75rem + env(safe-area-inset-bottom));
   }
+
+  .app-debts .fab {
+    display: none;
+  }
 }
 
 @media (max-width: 540px) {
@@ -6189,6 +6203,27 @@ h2 {
 
   .debt-form-actions > .btn {
     flex: 1 1 8rem;
+  }
+}
+
+@media (max-width: 359px) {
+  .debt-overview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .debt-total {
+    grid-column: auto;
+  }
+
+  .debt-stat:last-child {
+    grid-column: auto;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .debt-stat:last-child > div,
+  .debt-stat:last-child > small {
+    grid-column: auto;
+    grid-row: auto;
   }
 }
 

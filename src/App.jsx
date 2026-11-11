@@ -246,7 +246,7 @@ export default function App() {
   }
 
   return (
-    <div className="app">
+    <div className={`app${page === 'debts' ? ' app-debts' : ''}`}>
       <a className="skip-link" href="#main-content">Skip to main content</a>
       <header className="topbar">
         <div className="brand">
