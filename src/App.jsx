@@ -27,7 +27,7 @@ const PAGES = [
   { id: 'dashboard', label: 'Dashboard', compactLabel: 'Home' },
   { id: 'history', label: 'History' },
   { id: 'review', label: 'Monthly Review', compactLabel: 'Review' },
-  { id: 'debts', label: 'Debts' },
+  { id: 'debts', label: 'Debts', compactLabel: 'Debt' },
   { id: 'settings', label: 'Settings' },
 ]
 

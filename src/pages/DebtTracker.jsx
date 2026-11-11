@@ -504,7 +504,7 @@ function PaymentForm({ debt, linkedSchedule, onSave, onCancel }) {
               </span>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem' }}>
+            <div className="debt-payment-split-grid" style={{ display: 'grid', gap: '0.8rem' }}>
               <div>
                 <small style={{ color: 'var(--muted)', fontSize: '0.74rem', display: 'block' }}>Principal (reduces balance)</small>
                 <strong style={{ fontSize: '0.98rem', color: 'var(--ink)', fontFamily: 'var(--mono)' }}>{formatINR(autoSplit.principal)}</strong>
@@ -1017,7 +1017,7 @@ function DebtImportModal({ onDismiss, onFileParsed, existingDebts = [] }) {
           ❓ What columns should my file have?
         </summary>
         <div style={{ padding: '0.6rem 0 0' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem' }}>
+          <div className="debt-import-help-grid" style={{ display: 'grid', gap: '0.8rem' }}>
             <div style={{ background: 'var(--sage)', padding: '0.8rem', borderRadius: '10px' }}>
               <strong style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.82rem', color: 'var(--ink)' }}>Must have (at least these)</strong>
               <ul style={{ margin: 0, paddingLeft: '1.1rem', fontSize: '0.82rem', lineHeight: 1.7, listStyle: 'none' }}>
@@ -1502,7 +1502,7 @@ export default function DebtTracker({
                 <div className="debt-progress" role="progressbar" aria-label={`${debt.name} paid off`} aria-valuenow={Math.round(progress)} aria-valuemin="0" aria-valuemax="100">
                   <span style={{ width: `${progress}%` }} />
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.73rem', color: 'var(--muted)', marginTop: '0.25rem' }}>
+                <div className="debt-card-progress-label" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.73rem', color: 'var(--muted)', marginTop: '0.25rem' }}>
                   <span>{Math.round(progress)}% repaid ({formatINR(debt.principalPaid || Math.max(0, debt.originalAmount - debt.balance))})</span>
                   <span>{formatINR(debt.balance)} remaining</span>
                 </div>

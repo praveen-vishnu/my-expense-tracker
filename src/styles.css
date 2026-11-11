@@ -5497,6 +5497,11 @@ h2 {
   gap: 0.8rem;
 }
 
+.debt-import-help-grid,
+.debt-payment-split-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .debt-field-wide {
   grid-column: 1 / -1;
 }
@@ -5782,5 +5787,426 @@ h2 {
   .debt-card {
     animation: none;
     transition: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .app {
+    width: min(100% - 1rem, 560px);
+    padding: max(0.75rem, env(safe-area-inset-top)) 0 calc(6rem + env(safe-area-inset-bottom));
+  }
+
+  .topbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 0.55rem;
+    padding: 0.75rem;
+  }
+
+  .brand,
+  .brand small {
+    min-width: 0;
+  }
+
+  .brand > span {
+    font-size: 1.05rem;
+  }
+
+  .brand small {
+    display: block;
+    font-size: 0.72rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+
+  .topbar-actions {
+    grid-column: 2;
+    grid-row: 1;
+    gap: 0.3rem;
+  }
+
+  .topbar-btn,
+  .theme-toggle {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .month-selector {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .month-label {
+    min-width: 0;
+    flex: 1;
+    font-size: 0.9rem;
+  }
+
+  .tabs {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.15rem;
+    overflow: visible;
+    padding: 0.25rem;
+  }
+
+  .tabs button {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    padding: 0.35rem 0.15rem;
+    font-size: clamp(0.65rem, 2.7vw, 0.78rem);
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .tab-label-full {
+    display: none;
+  }
+
+  .tab-label-compact {
+    display: inline;
+  }
+
+  #main-content,
+  .page,
+  .page > * {
+    min-width: 0;
+  }
+
+  .panel,
+  .review-story {
+    padding: 1rem;
+  }
+
+  .inline-form,
+  .review-two-col {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .inline-form > .btn {
+    width: 100%;
+  }
+
+  .drift-table-container,
+  .import-table-container {
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+  }
+
+  .drift-table {
+    min-width: 640px;
+  }
+
+  .import-table {
+    min-width: 720px;
+  }
+
+  .account-settings-item {
+    align-items: flex-start;
+  }
+
+  .acc-meta {
+    min-width: 0;
+  }
+
+  .account-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .debt-page-head {
+    align-items: stretch;
+  }
+
+  .debt-page-head > div:first-child {
+    min-width: 0;
+  }
+
+  .debt-head-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 0.45rem;
+  }
+
+  .debt-head-actions > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .debt-head-actions .btn {
+    min-height: 44px;
+    padding: 0.5rem;
+    line-height: 1.2;
+    white-space: normal;
+  }
+
+  .debt-head-actions > .text-btn {
+    grid-column: 1 / -1;
+  }
+
+  .debt-freedom-banner {
+    align-items: stretch;
+    padding: 1rem;
+  }
+
+  .debt-freedom-content {
+    align-items: flex-start;
+  }
+
+  .debt-freedom-progress-wrap {
+    min-width: 0;
+    max-width: none;
+    width: 100%;
+  }
+
+  .debt-overview {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    padding: 1.1rem;
+  }
+
+  .debt-total {
+    grid-column: auto;
+    padding-bottom: 0.9rem;
+    border-bottom: 1px solid rgb(255 255 255 / 0.18);
+  }
+
+  .debt-overview-divider {
+    display: none;
+  }
+
+  .debt-stat {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid rgb(255 255 255 / 0.12);
+  }
+
+  .debt-stat:last-child {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+
+  .debt-total > strong,
+  .debt-stat > strong {
+    overflow-wrap: anywhere;
+  }
+
+  .debt-strategy-head {
+    align-items: stretch;
+  }
+
+  .debt-strategy-toggle {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .strategy-btn {
+    min-height: 44px;
+    justify-content: flex-start;
+  }
+
+  .debt-strategy-steps {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .debt-strategy-pills {
+    width: 100%;
+  }
+
+  .strategy-step-pill {
+    max-width: 100%;
+    flex-wrap: wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .debt-card {
+    padding: 0.9rem;
+  }
+
+  .debt-card-top {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 0.5rem;
+  }
+
+  .debt-card-title,
+  .debt-card-title > div {
+    min-width: 0;
+  }
+
+  .debt-card-title h3 {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .debt-due {
+    max-width: min(8rem, 38vw);
+    margin-left: 0;
+    white-space: normal;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+  }
+
+  .debt-card-balance {
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .debt-card-balance > div {
+    min-width: 0;
+  }
+
+  .debt-card-balance > div:first-child strong {
+    font-size: clamp(0.95rem, 4vw, 1.15rem);
+    overflow-wrap: anywhere;
+  }
+
+  .debt-original strong {
+    overflow-wrap: anywhere;
+  }
+
+  .debt-card-progress-label {
+    flex-wrap: wrap;
+    gap: 0.2rem 0.6rem;
+    overflow-wrap: anywhere;
+  }
+
+  .debt-card-facts {
+    gap: 0.4rem 0.7rem;
+  }
+
+  .debt-recurring-cta {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .debt-recurring-cta button {
+    min-height: 44px;
+  }
+
+  .debt-card-footer {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+
+  .debt-payment-preview {
+    min-width: 0;
+  }
+
+  .debt-card-actions {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .debt-card-actions .text-btn,
+  .debt-pay-btn {
+    min-height: 44px;
+  }
+
+  .debt-pay-btn {
+    min-width: 0;
+    white-space: normal;
+  }
+
+  .debt-history-row {
+    align-items: flex-start;
+  }
+
+  .debt-history-date {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .debt-history-amount {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .debt-form-grid,
+  .debt-import-help-grid,
+  .debt-payment-split-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .debt-field-wide {
+    grid-column: auto;
+  }
+
+  .debt-form-actions {
+    flex-wrap: wrap;
+  }
+
+  .debt-sheet {
+    width: min(620px, 100%);
+    max-height: calc(100dvh - env(safe-area-inset-top) - 0.5rem);
+    padding: 1rem;
+  }
+
+  .fab {
+    right: 0.75rem;
+    bottom: calc(0.75rem + env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 540px) {
+  .month-jump-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .history-actions-group {
+    width: 100%;
+  }
+
+  .history-actions-group .btn {
+    flex: 1 1 8rem;
+    justify-content: center;
+  }
+
+  .debt-page-head {
+    gap: 0.8rem;
+  }
+
+  .debt-strategy-box {
+    padding: 1rem;
+  }
+
+  .debt-card-top {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .debt-due {
+    justify-self: start;
+    max-width: 100%;
+  }
+
+  .debt-form-actions > .btn {
+    flex: 1 1 8rem;
+  }
+}
+
+@media (min-width: 761px) and (max-width: 1023px) {
+  .debt-page-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .debt-head-actions {
+    width: 100%;
+    flex-shrink: 1;
+    flex-wrap: wrap;
+  }
+
+  .debt-head-actions .btn {
+    min-width: 0;
+    flex: 1 1 9rem;
+    justify-content: center;
   }
 }
