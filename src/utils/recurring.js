@@ -33,6 +33,7 @@ export function syncLinkedEmiAmounts(data) {
 export function addRecurringExpenses(data, month) {
   const additions = []
   const debtById = new Map((data.debts || []).map((debt) => [debt.id, debt]))
+  const dismissed = new Set(data.dismissedRecurring || [])
 
   for (const schedule of data.recurringExpenses || []) {
     if (!isValidMonthKey(schedule.startMonth)) continue
@@ -43,6 +44,7 @@ export function addRecurringExpenses(data, month) {
     if (linkedDebt && (linkedDebt.status === 'paid' || linkedDebt.balance <= 0)) continue
 
     const id = `recurring_${schedule.id}_${month}`
+    if (dismissed.has(id) || dismissed.has(`${schedule.id}_${month}`)) continue
     if (data.expenses.some((expense) => expense.id === id)) continue
 
     const day = Math.min(schedule.day, daysInMonth(month))

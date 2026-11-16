@@ -152,3 +152,10 @@ test('normalizeData validates monthly maps for income, budgets, categoryBudgets,
   assert.deepEqual(result.categoryBudgets, { '2026-10': { Food: 15000, Travel: 5000 } })
   assert.deepEqual(result.categories, ['Food', 'Travel', 'Shopping'])
 })
+
+test('normalizeData sanitizes and retains dismissedRecurring array', () => {
+  const result = normalizeData({
+    dismissedRecurring: ['recurring_rec_1_2026-11', '', null, 123, 'recurring_rec_2_2026-11'],
+  })
+  assert.deepEqual(result.dismissedRecurring, ['recurring_rec_1_2026-11', 'recurring_rec_2_2026-11'])
+})

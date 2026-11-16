@@ -206,13 +206,26 @@ export function useTrackerData(authReady, authUser, month) {
     return cleanupAutoSync
   }, [authReady, userId, handleRemoteChange])
 
-  // 3. Materialize recurring expenses when month changes (smoothly in memory, no unmounting)
+  // 3. Materialize recurring expenses when month changes or schedules change
+  const prevMonthRef = useRef(month)
+  const prevSchedulesRef = useRef(data.recurringExpenses)
+
   useEffect(() => {
     if (!ready) return
+    const monthChanged = prevMonthRef.current !== month
+    const schedulesChanged = prevSchedulesRef.current !== data.recurringExpenses
+    prevMonthRef.current = month
+    prevSchedulesRef.current = data.recurringExpenses
+
+    if (!monthChanged && !schedulesChanged) return
+
     const current = dataRef.current
     const next = materializeRecurringData(current, month)
-    if (next !== current) setData(next)
-  }, [month, ready, data])
+    if (next !== current) {
+      dataRef.current = next
+      setData(next)
+    }
+  }, [month, ready, data.recurringExpenses])
 
   // 4. Debounced Snapshot Backup Effect
   useEffect(() => {
@@ -251,27 +264,90 @@ export function useTrackerData(authReady, authUser, month) {
     })
 
     setData((current) => {
+      let next
       if (existingId) {
-        return {
+        next = {
           ...current,
           expenses: current.expenses.map((expense) =>
             expense.id === existingId ? { ...expense, ...fields } : expense
           ),
         }
+      } else {
+        next = {
+          ...current,
+          expenses: [record, ...current.expenses],
+        }
       }
-      return {
-        ...current,
-        expenses: [record, ...current.expenses],
-      }
+      dataRef.current = next
+      return next
     })
   }, [])
 
   const deleteExpense = useCallback((expenseId) => {
+    if (!expenseId) return
     enqueueMutation({ table: 'expenses', id: expenseId, op: 'delete' })
-    setData((current) => ({
-      ...current,
-      expenses: current.expenses.filter((item) => item.id !== expenseId),
-    }))
+
+    const currentExpenses = dataRef.current?.expenses || []
+    const targetExpense = currentExpenses.find((e) => e.id === expenseId)
+    const isRecurring =
+      Boolean(targetExpense?.recurringId) ||
+      expenseId.startsWith('recurring_')
+
+    let recurringDismissKey = null
+    let linkedPaymentIdToDelete = null
+    let updatedDebt = null
+
+    if (isRecurring) {
+      recurringDismissKey = expenseId
+      const schedules = dataRef.current?.recurringExpenses || []
+      const schedule = schedules.find(
+        (s) => s.id === targetExpense?.recurringId || expenseId.startsWith(`recurring_${s.id}_`)
+      )
+      if (schedule && schedule.kind === 'emi' && schedule.debtId) {
+        const expMonth = targetExpense?.date?.slice(0, 7) || monthRef.current
+        linkedPaymentIdToDelete = `recurring_emi_${schedule.id}_${expMonth}`
+        const currentPayments = dataRef.current?.debtPayments || []
+        const payment = currentPayments.find((p) => p.id === linkedPaymentIdToDelete)
+        if (payment) {
+          enqueueMutation({ table: 'debt_payments', id: payment.id, op: 'delete' })
+          const debt = (dataRef.current?.debts || []).find((d) => d.id === schedule.debtId)
+          if (debt) {
+            updatedDebt = {
+              ...debt,
+              balance: Math.round((debt.balance + payment.principal) * 100) / 100,
+              principalPaid: Math.max(0, Math.round((debt.principalPaid - payment.principal) * 100) / 100),
+              interestPaid: Math.max(0, Math.round((debt.interestPaid - (payment.interest || 0)) * 100) / 100),
+            }
+            enqueueMutation({ table: 'debts', id: debt.id, op: 'upsert', payload: updatedDebt })
+          }
+        }
+      }
+    }
+
+    setData((current) => {
+      const nextExpenses = (current.expenses || []).filter((item) => item.id !== expenseId)
+      const nextDismissed = recurringDismissKey
+        ? [...new Set([...(current.dismissedRecurring || []), recurringDismissKey])]
+        : (current.dismissedRecurring || [])
+
+      const nextDebtPayments = linkedPaymentIdToDelete
+        ? (current.debtPayments || []).filter((p) => p.id !== linkedPaymentIdToDelete)
+        : (current.debtPayments || [])
+
+      const nextDebts = updatedDebt
+        ? (current.debts || []).map((d) => (d.id === updatedDebt.id ? updatedDebt : d))
+        : (current.debts || [])
+
+      const next = {
+        ...current,
+        expenses: nextExpenses,
+        dismissedRecurring: nextDismissed,
+        debtPayments: nextDebtPayments,
+        debts: nextDebts,
+      }
+      dataRef.current = next
+      return next
+    })
   }, [])
 
   const saveDebt = useCallback((fields, existingId) => {
@@ -412,13 +488,72 @@ export function useTrackerData(authReady, authUser, month) {
   const deleteBatchExpenses = useCallback((expenseIds) => {
     if (!Array.isArray(expenseIds) || !expenseIds.length) return
     const idSet = new Set(expenseIds)
+    const currentExpenses = dataRef.current?.expenses || []
+    const schedules = dataRef.current?.recurringExpenses || []
+    const currentDebts = dataRef.current?.debts || []
+    const currentPayments = dataRef.current?.debtPayments || []
+
+    const dismissedToAdd = []
+    const paymentsToDelete = new Set()
+    const debtsToUpdate = new Map()
+
     for (const id of expenseIds) {
       enqueueMutation({ table: 'expenses', id, op: 'delete' })
+
+      const exp = currentExpenses.find((e) => e.id === id)
+      const isRecurring = Boolean(exp?.recurringId) || id.startsWith('recurring_')
+      if (isRecurring) {
+        dismissedToAdd.push(id)
+        const schedule = schedules.find(
+          (s) => s.id === exp?.recurringId || id.startsWith(`recurring_${s.id}_`)
+        )
+        if (schedule && schedule.kind === 'emi' && schedule.debtId) {
+          const expMonth = exp?.date?.slice(0, 7) || monthRef.current
+          const paymentId = `recurring_emi_${schedule.id}_${expMonth}`
+          const payment = currentPayments.find((p) => p.id === paymentId)
+          if (payment) {
+            paymentsToDelete.add(paymentId)
+            enqueueMutation({ table: 'debt_payments', id: payment.id, op: 'delete' })
+            const debt = debtsToUpdate.get(schedule.debtId) || currentDebts.find((d) => d.id === schedule.debtId)
+            if (debt) {
+              const updatedDebt = {
+                ...debt,
+                balance: Math.round((debt.balance + payment.principal) * 100) / 100,
+                principalPaid: Math.max(0, Math.round((debt.principalPaid - payment.principal) * 100) / 100),
+                interestPaid: Math.max(0, Math.round((debt.interestPaid - (payment.interest || 0)) * 100) / 100),
+              }
+              debtsToUpdate.set(schedule.debtId, updatedDebt)
+              enqueueMutation({ table: 'debts', id: debt.id, op: 'upsert', payload: updatedDebt })
+            }
+          }
+        }
+      }
     }
-    setData((current) => ({
-      ...current,
-      expenses: current.expenses.filter((item) => !idSet.has(item.id)),
-    }))
+
+    setData((current) => {
+      const nextExpenses = (current.expenses || []).filter((item) => !idSet.has(item.id))
+      const nextDismissed = dismissedToAdd.length
+        ? [...new Set([...(current.dismissedRecurring || []), ...dismissedToAdd])]
+        : (current.dismissedRecurring || [])
+
+      const nextDebtPayments = paymentsToDelete.size
+        ? (current.debtPayments || []).filter((p) => !paymentsToDelete.has(p.id))
+        : (current.debtPayments || [])
+
+      const nextDebts = debtsToUpdate.size
+        ? (current.debts || []).map((d) => debtsToUpdate.get(d.id) || d)
+        : (current.debts || [])
+
+      const next = {
+        ...current,
+        expenses: nextExpenses,
+        dismissedRecurring: nextDismissed,
+        debtPayments: nextDebtPayments,
+        debts: nextDebts,
+      }
+      dataRef.current = next
+      return next
+    })
   }, [])
 
   const updateBatchExpenses = useCallback((expenseIds, fields) => {

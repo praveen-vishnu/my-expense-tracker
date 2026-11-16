@@ -249,3 +249,30 @@ test('syncRecurringExpenseToExpenses updates matching materialized expenses for 
   const unchanged = result.expenses.find((e) => e.id === 'exp_other')
   assert.equal(unchanged.amount, 250)
 })
+
+test('addRecurringExpenses respects dismissedRecurring and does not resurrect deleted recurring expenses', () => {
+  const data = {
+    recurringExpenses: [
+      {
+        id: 'rec_gym',
+        name: 'Gym Membership',
+        amount: 2500,
+        category: 'Health',
+        day: 1,
+        startMonth: '2026-11',
+        kind: 'monthly',
+      },
+    ],
+    dismissedRecurring: ['recurring_rec_gym_2026-11'],
+    expenses: [],
+  }
+
+  // November expense should NOT be generated because it was dismissed/deleted for 2026-11
+  const nov = addRecurringExpenses(data, '2026-11')
+  assert.equal(nov.expenses.length, 0)
+
+  // December expense should STILL be generated normally
+  const dec = addRecurringExpenses(data, '2026-12')
+  assert.equal(dec.expenses.length, 1)
+  assert.equal(dec.expenses[0].id, 'recurring_rec_gym_2026-12')
+})

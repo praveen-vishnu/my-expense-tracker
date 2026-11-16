@@ -157,9 +157,14 @@ export default function History({
       confirmLabel: `Delete ${ids.length} ${ids.length === 1 ? 'expense' : 'expenses'}`,
       danger: true,
       onConfirm: () => {
-        onDeleteBatchExpenses(ids)
-        setSelectedIds(new Set())
-        setConfirm(null)
+        try {
+          onDeleteBatchExpenses(ids)
+          setSelectedIds(new Set())
+        } catch (err) {
+          console.error('Failed to delete batch expenses:', err)
+        } finally {
+          setConfirm(null)
+        }
       },
     })
   }

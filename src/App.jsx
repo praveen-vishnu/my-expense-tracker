@@ -107,16 +107,37 @@ export default function App() {
   }, [])
 
   const handlePromptDeleteExpense = useCallback((expense) => {
+    const isRecurring = Boolean(expense.recurringId) || expense.id?.startsWith('recurring_')
+    const schedule = isRecurring
+      ? (data.recurringExpenses || []).find(
+          (r) =>
+            r.id === expense.recurringId ||
+            expense.id === `recurring_${r.id}_${month}` ||
+            expense.id?.startsWith(`recurring_${r.id}_`)
+        )
+      : null
+
+    const title = schedule ? 'Delete recurring transaction?' : 'Delete expense?'
+    const message = schedule
+      ? `${expense.category}${expense.note ? ` (${expense.note})` : ''} for ${formatINR(expense.amount)} is generated from "${schedule.name}". Do you want to remove this transaction for this month?`
+      : `${expense.category}${expense.note ? ` (${expense.note})` : ''} expense for ${formatINR(expense.amount)} from ${relativeDateLabel(expense.date)} will be removed.`
+    const confirmLabel = schedule ? 'Delete this occurrence' : 'Delete expense'
+
     setConfirm({
-      title: 'Delete expense?',
-      message: `${expense.category}${expense.note ? ` (${expense.note})` : ''} expense for ${formatINR(expense.amount)} from ${relativeDateLabel(expense.date)} will be removed.`,
-      confirmLabel: 'Delete expense',
+      title,
+      message,
+      confirmLabel,
       onConfirm: () => {
-        deleteExpense(expense.id)
-        setConfirm(null)
+        try {
+          deleteExpense(expense.id)
+        } catch (err) {
+          console.error('Failed to delete expense:', err)
+        } finally {
+          setConfirm(null)
+        }
       },
     })
-  }, [deleteExpense])
+  }, [deleteExpense, data.recurringExpenses, month])
 
   const handleOpenAddIncome = useCallback(() => {
     setIncomeForm(true)

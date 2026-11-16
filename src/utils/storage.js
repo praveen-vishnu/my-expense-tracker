@@ -21,6 +21,7 @@ export function emptyData() {
     budgets: {},
     categoryBudgets: {},
     recurringExpenses: [],
+    dismissedRecurring: [],
     debts: [],
     debtPayments: [],
     expenses: [],
@@ -286,6 +287,10 @@ export function normalizeData(raw) {
       }))
     : []
 
+  const dismissedRecurring = Array.isArray(raw.dismissedRecurring)
+    ? raw.dismissedRecurring.filter((id) => typeof id === 'string' && id.trim())
+    : []
+
   return {
     version: DATA_VERSION,
     income: normalizeIncome(raw.income),
@@ -294,6 +299,7 @@ export function normalizeData(raw) {
     budgets: normalizeBudgets(raw.budgets),
     categoryBudgets: normalizeCategoryBudgets(raw.categoryBudgets),
     recurringExpenses: normalizeRecurringExpenses(raw.recurringExpenses),
+    dismissedRecurring,
     debts,
     debtPayments,
     expenses,
